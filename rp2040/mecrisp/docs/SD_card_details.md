@@ -2,6 +2,11 @@
 
 Notes on the architecture of SD cards and microSD cards in particular.
 
+We are aiming to operate in the SPI Mode which is a secondary protocol offered through the SD Memory Card protocol.
+This is actually a subset of the full SD protocol operating in a single bit serial rather than a four bit parallel mode.
+
+The following structures are used by the various command to send and receive data.
+
 ## Coded Structures
 
 ### CID (Card Identification) Register Definitions
@@ -149,3 +154,140 @@ Bit position | Width (bits) | Value | Description
 The start bit is always zero and followed by the transmission direction bit, one indicates from host, the next six bits represent the binary coded integer value of the command index (ranging from zero to 63). Some commands require an argument such as an address and this is coded in the next 32 bits.
 All values represented by *x* in the above table are dependent upon the particular command, and the CRC, *c* is calculated across all the bits from positions [47:8].
 Every command is terminated by an end bit of one.
+
+## Command Classes
+
+The SD protocol has twelve classes of command defined, however, the SPI version does not support three of these classes: 1, 3 and 9. Most commands are mandatory and *should* be reliable whilst a number are optional and may not be implemented.
+
+### Class 0—Basic
+
+Command | Mandatory / Optional | Argument | Abbreviation | Description
+:---: | --- | --- | :---: | ---
+CMD0 | Mandatory | [31:0]Fill | R1 | GO_IDLE_STATE | Reset the SD Card
+CMD1 | Mandatory | [31]Reserved_bit [30]HCS [29:0]Reserved_bits | R1 | SEND_OP_COND | Sends host capacity support information and activate the card's initialisation process. HCS is effective the the card received SEND_IF_COND command
+CMD8 | Mandatory | [31:12]Reserved_bits [11:8]Supply_voltage(Vhs) [7:0]Check_pattern | R7 | SEND_IF_COND | Sends SD memory Card interface condition that included host supply voltage information and asks the accessed card whether card can operate in supplied voltage range.
+CMD9 | Mandatory | [31:0]Fill | R1 | SEND_CSD | Asks the selected card to send its card-specific data (CSD)
+CMD10 | Mandatory | [31:0]Fill | R1 | SEND_CID | Asks trhe selected card to send its card identification (CID)
+CMD12 | Mandatory | [31:0]Fill | R1b | STOP_TRANSMISSION | Forces the card to stop transmission in Multiple Block Read Operation.
+CMD13 | Mandatory | [31:0]Fill | R2 | SEND_STATUS | Asks the selected card to send its status register.
+CMD58 | Mandatory | [31:0]Fill | R3 | READ_OCR | Reads the OCR register of a card. CCS bit is assigned to OCR[30]
+CMD59 | Mandatory | [31:1]Fill [0]CRC_option | R1 | CRC_ON_OFF | Turns the CRC option on or off. | '1' in the CRC option bit will turn the option on, a '0' will turn it off.
+
+* R1b is an R1 result with an optional trailing busy signal.
+
+### Class 2—Block Read
+
+Command | Mandatory / Optional | Argument | Abbreviation | Description
+:---: | --- | --- | :---: | ---
+CMD16 | Mandatory | [31:0]Block_length | R1 | SET_BLOCKLEN | In case of SDSC Card, block length is set by this command. In case of SDHC and SDXC Cards, block length of the memory access comands are fixed to 12 bytes. The length of LOCK_UNLOCK command is set by this command regardless of card capacity.
+CMD17 | Mandatory | [31:0]Data_address | R1 | READ_SINGLE_BLOCK | Reads a block of size selected by the SET_BLOCKLEN command.
+CMD18 | Mandatory | [31:0]Data_address | R1 | READ_MULTIPLE_BLOCK | Continuously transfers dataa blocks from card to host until interrupted by a STOP_TRANSMISSION command.
+
+### Class 4—Block Write
+
+Command | Mandatory / Optional | Argument | Abbreviation | Description
+:---: | --- | --- | :---: | ---
+CMD16 | Mandatory | [31:0]Block_length | R1 | SET_BLOCKLEN | In case of SDSC Card, block length is set by this command. In case of SDHC and SDXC Cards, block length of the memory access comands are fixed to 12 bytes. The length of LOCK_UNLOCK command is set by this command regardless of card capacity.
+CMD24 | Mandatory | [31:0]Data_address | R1 | WRITE_BLOCK | Writes a block of the size selected by the SET_BLOCKLEN command.
+CMD25 | Mandatory | [31:0]Data_address | R1 | WRITE_MULTIPLE_BLOCK | Continuously write blocks of data until 'STOP TRAN' token is sent rather than 'START BLOCK' token.
+CMD27 | Mandatory | [31:0]Fill | R1 | PROGRAM_CSD | Programming of the programmable bits of the CSD.
+
+
+### Class 5—Erase
+
+Command | Mandatory / Optional | Argument | Abbreviation | Description
+:---: | --- | --- | :---: | ---
+CMD32 | Mandatory | 
+CMD33 | Mandatory | 
+CMD38 | Mandatory | 
+
+### Class 6—Write Protection
+
+In each case these commands only operate if the card has write protection features. SDHC and SDXC cards do not implement these commands.
+
+Command | Mandatory / Optional | Argument | Abbreviation | Description
+:---: | --- | --- | :---: | ---
+CMD28 | Optional | [31:0]Data_address | R1b | SET_WRITE_PROT | This command sets the write protection bit of the addressed group. The properties of write protection are coded in the cad specific data (WP_GRP_SIZE).
+CMD29 | Optional | [31:0]Data_address | R1b | CLR_WRITE_PROT | This command clears the write protection bit of the addressed group.
+CMD30 | Optional | [31:0]Write_protect_data_address | R1 | SEND_WRITE_PROT | This command asks the card to send the status of the write protection bits.
+
+* R1b is an R1 result with an optional trailing busy signal.
+
+### Class 7—Lock Card
+
+Command | Mandatory / Optional | Argument | Abbreviation | Description
+:---: | --- | --- | :---: | ---
+CMD16 | Mandatory | [31:0]Block_length | R1 | SET_BLOCKLEN | In case of SDSC Card, block length is set by this command. In case of SDHC and SDXC Cards, block length of the memory access comands are fixed to 12 bytes. The length of LOCK_UNLOCK command is set by this command regardless of card capacity.
+CMD42 | *(note)* | [31:0]Reserved_bits | R1 | LOCK_UNLOCK | Used to set/reset the Password or lock/unlock the card. A transferred datablock includes all the command details. The size of the Data Block is defined with SET_BLOCK_LEN command.
+
+* CMD42 is optional for protocol versions 1.01 and 1.10; mandatory for protocol version 2.0
+### Class 8—Application Specific
+
+Command | Mandatory / Optional | Argument | Abbreviation | Description
+:---: | --- | --- | :---: | ---
+CMD55 | Mandatory | [31:0]Fill | R1 | APP_CMD | Defines to the card that the next command is an application specific command rather than a standard command.
+CMD56 | Mandatory | [31:1]Fill [0]RD/WR | R1 | GEN_CMD | Used to transfer a Data Block to the card or to get a Data Block from the card for general purpose/application specific commands. In case of Standard Capacity SD Memory Card, the size of the Data Block shall be defined with SET_CLOCK_LEN command. In case of SDHC and SDXC cards, block length is fixed to 512 bytes.
+ACMD6 | Mandatory | Not implemented in SPI Mode.
+ACMD13 | Mandatory | [31:0]Fill | R2 | SD_STATUS | Send the SD Status.
+ACMD22 | Mandatory | [31:0]Fill | R1 | SEND_NUM_WR_BLOCKS | Send the numbers of the well written (without errors) blocks. Responds with 32 bit + CRC data block.
+ACMD23 | Mandatory | [31:23]Fill [22:0]Number_of_blocks | R1 | SET_WR_BLK_ERASE_COUNT | Set the number of write blocks to be pre-erased before writing (to be used for faster Multiple Block WR command). '1'=default (one wr block).
+ACMD41 | Mandatory | [31]Reserved_bit [30]HCS [29:0]Reserved_bits | R1 | SD_SEND_OP_COND | Sends host capacity support information and activates the card's initialisation process.
+ACMD42 | Mandatory | [31:1]Fill [0]Set_CD | R1 | SET_CLR_CARD_DETECT | Connect(1) or Disconnect(0) the 50KΩ pull-up resistor on CS (pin-1) of the card. The pull-up may be used for card detection.
+ACMD51 | Mandatory | [31:0]Fill | R1 | SEND_SCR | Reads the SD Configuration Register (SCR).
+
+### Class 10—Switch
+
+Command | Mandatory / Optional | Argument | Abbreviation | Description
+:---: | --- | --- | :---: | ---
+CMD6 | Mandatory | [31]Mode [30:24]Reserved [23:20]FN_group_6 [19:16]FN_group_5 [15:12]FN_group_4 [11:8]FN_group_3 [7:4]FN_group_2 [3:0]FN_group_1 | R1 | SWITCH_FUNC | Mode=0: Checks switchable function; Mode=1: Switch card function.
+CMD34 | Optional | 
+CMD35 | Optional | 
+CMD36 | Optional | 
+CMD37 | Optional | 
+CMD50 | Optional | 
+CMD57 | Optional | 
+
+* CMD24-37, CMD50 and CMD57 are all reserved for SD command expansion and depend upon the states of the switch groups selected.
+
+#### CMD6 Mode 0—Check switchable function
+
+A single function may be selected in each of the six groups in a single invocation of CMD6. The default function is done by setting the function to zero. Select a specific function by using the appropriate value form the table below. Selecting 0xF will keep the current function that has been selected for the function group.
+
+The response returns three statuses:
+* The functions that are supported by each of the function groups.
+* The function that the card will switch to in each of the function groups. This value is identical to the provided argument if the host made a value selection or 0xF if the selected function was invalid.
+* Maximum current consumption under the selected functions. If one of the selected functions was wrong, the return value will be zero.
+
+Group No. | 6 | 5 | 4 | 3 | 2 | 1
+:---: | :---: | :---: | :---: | :---: | :---: | :---:
+**Func name** | **reserved** | **reserved** | **Current Limit** | **Driver Strength** | **Command system** | **Access mode**
+0x0 | Default | Default | Default 200mA | Default Type_B | Default | Default SDR12
+0x1 | Reserved | Reserved | 400mA | Type_A | For_eC | High-Speed SDR25
+0x2 | Reserved | Reserved | 600mA | Type_C | Reserved | SDR50
+0x3 | Reserved | Reserved | 800mA | Type_D | OTP | SDR104
+0x4 | Reserved | Reserved | Reserved | Reserved | ASSD | DDR50
+0x5 | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved
+0x6 | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved
+0x7 | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved
+0x8 | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved
+0x9 | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved
+0xA | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved
+0xB | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved
+0xC | Reserved | Reserved | Reserved | Reserved | (eSD) | Reserved
+0xD | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved
+0xE | Reserved | Reserved | Reserved | Reserved | Vendor Specific | Reserved
+0xF | No influence | No influence | No influence | No influence | No influence | No influence
+
+#### CMD6 Mode 1—Switch card function
+
+Again, a single function may be selected in each of the six groups in a single invocation of CMD6. The default function is done by setting the function to zero. It is recommended to specify 0xF (no influence) for all functions except the one that requires changing, select from the table above.
+
+The response returns three statuses:
+* The functions that are supported by each of the function groups.
+* The function that is the result of the switch command. In case of invalid selection of one function or more, all set values are ignored and no change will be done (identical to the case where 0xF is selected for all groups). The response to an invalid selection will be 0xF.
+* Maximum current consumption under the selected functions. If one of the selected functions was wrong, the return value will be zero.
+
+### Class 11—Reserved
+
+No commands defined.
+
