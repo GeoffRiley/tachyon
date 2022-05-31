@@ -24,3 +24,30 @@ ASCLIT | pri | ( mask — ) | compile or stack a literal string from the input b
 IP#  | pre   | | Parse ip4 address eg *IP# 192.168.0.101* → $C0A80005
 CR   | pub   | | redefine as a single carriage return without line feed
 CRLF | pub   | | emit a carriage return and line feed
+PRINT | pub  | ( n — ) | print a single number; wrapper for standard *.* word
+PRINT" | pre | | compile a string and print it when executed; wrapper for standard *."* word
+VECTORS | func | ( cnt — ) ( index — adr ) | create a vector table, at compile time create *cnt* vectors; execution return the *adr* of the vector number *index*
+.RSTACK | func | | print out the contents of the return stack in hex
+FAULT | func | | simple fault handler, resets the system rather than taking any remedial actions
+!FAULT | func | | word to install *FAULT* in the *irq-fault* vector
+QUIT! | func | ( f — ) | install function *f* in the *hook-quit* vector
+QUIT: | func | | defining word for new quite functions
+EMIT! | func | ( f — ) | install function *f* in the *hook-emit* vector
+KEY!  | func | ( f — ) | install function *f* in the *hook-key* vector
+!SERKEY | func | | set *hook-key* to *serial-key* and *hook-key?* to *serial-key?*: redirect stdin to the serial input
+CONOUT | func | | set *hook_emit* to *serial-emit*: redirect stdout to the serial output
+CON   | func | | redirect stdin and stdout to the serial interface
+save-emit | var | | variable to save the value of *serial-emit*/*hook-emit* during muting
+MUTED | func | | save *hook-emit* in *save-emit*; set *hook-emit* to *DROP*
+UNMUTED | func | | restore *hook_emit* from *save-emit*
+!SP   | func | | init stack pointer: move the SP back to the top of the stack space
+~laps | var  | | array of two cells used by the timing tools (assuming a cell is 4 bytes)
+LAP   | func | | move *~laps[0]* → *~laps[1]*; then *cycles* → *~laps[0]*
+LAP@  | func | | return the time difference (in ms) between the last two calls to LAP
+~p    | var  | | variable holding saved copy of thread end
+?REPORT | func | | checks if the thread end position is inconsistent; if so it prints an error message
+EMITS | func | ( c u — ) | emit *u* consecutive copies of the character *c*
+EMITD | func | ( u — ) | lim. 0 <= *u* <= 9: convert *u* into the ascii equivalent digit and emit it
+TAB   | func | ( — ) | emit a tab character
+TABS  | func | ( u — ) | emit *u* tab characters
+INDENT | func | ( u — ) | emit a carriage return followed by *u* tabs
