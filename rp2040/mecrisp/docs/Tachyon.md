@@ -31,7 +31,7 @@ VECTORS | func | ( cnt — ) ( index — adr ) | create a vector table, at compi
 FAULT | func | | simple fault handler, resets the system rather than taking any remedial actions
 !FAULT | func | | word to install *FAULT* in the *irq-fault* vector
 QUIT! | func | ( f — ) | install function *f* in the *hook-quit* vector
-QUIT: | func | | defining word for new quite functions
+QUIT: | func | | defining word for new quit functions
 EMIT! | func | ( f — ) | install function *f* in the *hook-emit* vector
 KEY!  | func | ( f — ) | install function *f* in the *hook-key* vector
 !SERKEY | func | | set *hook-key* to *serial-key* and *hook-key?* to *serial-key?*: redirect stdin to the serial input
@@ -51,3 +51,32 @@ EMITD | func | ( u — ) | lim. 0 <= *u* <= 9: convert *u* into the ascii equiva
 TAB   | func | ( — ) | emit a tab character
 TABS  | func | ( u — ) | emit *u* tab characters
 INDENT | func | ( u — ) | emit a carriage return followed by *u* tabs
+@org  | var  | | variable: data space base pointer
+~m    | var  | | variable: dictionary position
+~o    | var  | | variable: data space tracker pointer
+mecrisp | func | | initialise *~m*, *~o*, stack and *~laps*
+ctrls | VECTORS | | an array of 32 vectors corresponding to the 32 control keys; initialised to zeros
+CTRL! | func | ( cfa n — ) | *ctrls[n]* ← *cfa*: save the function address in the *n*th vector
+~k    | var  | | variable for last command entry
+REX   | func | | re-execute last entry
+DISCARD | func | | discard and reset the CLI **NOT SURE HOW THIS WORKS**
+      | key  | ^C | perform *RESET*
+      | key  | ^X | perform *REX*
+      | key  | esc | perform *DISCARD*
+~polls | buffer: | | 16 byte background polling buffer (4 cells)
+!POLLS | func | | initialise the *~polls* buffer to all zeros
+@POLL | func | ( n — addr ) | return the address of the *n*th element of the *~polls* buffer
+POLLS | func | | execute the defined polls
++POLL | func | ( cfa — ) | add a new polling routine, if there's space
+QKEY  | func | | polling loop waiting for input from serial interface
+~defers | var | | a single deferred execution vector
+~depth | var | | depth of deferred word
+defers | func | | execute the deferred word, if one exists: clears *~defers* before execution
+->    | func | | defer the execution of this word until the end of the line
+.base | func | | print the radix base prompt signal: '#' for decimal, '$' for hex, '%' for binary and '?' for anything else
+.depth | func | | print two digit depth
+.mode | func | | print 'R' for compile to ram mode or 'F' for compile to flash mode
+COMPEX | func | | *place saver*
+~query | var | | pointer to cfa of *query*
+TACHYON | func | | main Tachyon user prompt: defined as the system quit function
+
