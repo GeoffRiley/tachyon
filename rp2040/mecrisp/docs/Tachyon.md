@@ -79,4 +79,15 @@ defers | func | | execute the deferred word, if one exists: clears *~defers* bef
 COMPEX | func | | *place saver*
 ~query | var | | pointer to cfa of *query*
 TACHYON | func | | main Tachyon user prompt: defined as the system quit function
-
+DATA  | const | | ← $20030000: base for all data and buffers
+org   | func | ( n — ) | *org* ← *n*: update data space pointer with the given value
+org@  | func | ( — addr ) | return the address pointed to by the data space pointer
+res   | pre  | ( n — ) | *org* ← *org* + *n*: reserve bytes in data space without assigning a name
+(bytes) | pri | ( n — ) | create a new constant of *n* bytes, updating *org* ← *org* + *n* afterwards
+bytes | pre  | ( n — ) | pre-emptive version of *(bytes)*: use *n* *bytes* *new_name*
+byte  | pre  | ( — ) | allocate a single byte constant
+alorg | func | ( n — ) | align *@org* on a boundary appropriate to the given value *n*: *n* should be a power of 2
+(longs) | pri | ( n — ) | reserve space in the data space for *n* 32 bit long values
+longs | pre  | ( n — ) | pre-emptive version of *(longs)*
+long  | pre  | ( — ) | allocate space for a single 32 bit long value
+shift | func | ( n — ) | perform *<<* or *>>* automatically for *n* places depending upon the sign: negative shit right, positive shift left
