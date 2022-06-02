@@ -7,6 +7,7 @@ This document is particularly referencing the extensions as provided for the RP2
 word | type  | stack | comment
 ---  | :---: | :---: | ---
 tme  | const | | date of extension, YYMMDDhhmm
+\*TACHYON\* | func | | print extensions introduction message
 TME? | func  | ( stamp — ) | compare required *stamp* with *tme* and fails if current version is too old
 {    | func  | | ignore all until the next *}*: braces form comment blocks
 pre  | func  | | pre-emptive colon definition (an immediate)
@@ -26,68 +27,106 @@ CR   | pub   | | redefine as a single carriage return without line feed
 CRLF | pub   | | emit a carriage return and line feed
 PRINT | pub  | ( n — ) | print a single number; wrapper for standard *.* word
 PRINT" | pre | | compile a string and print it when executed; wrapper for standard *."* word
-VECTORS | func | ( cnt — ) ( index — adr ) | create a vector table, at compile time create *cnt* vectors; execution return the *adr* of the vector number *index*
-.RSTACK | func | | print out the contents of the return stack in hex
-FAULT | func | | simple fault handler, resets the system rather than taking any remedial actions
-!FAULT | func | | word to install *FAULT* in the *irq-fault* vector
-QUIT! | func | ( f — ) | install function *f* in the *hook-quit* vector
-QUIT: | func | | defining word for new quit functions
-EMIT! | func | ( f — ) | install function *f* in the *hook-emit* vector
-KEY!  | func | ( f — ) | install function *f* in the *hook-key* vector
-!SERKEY | func | | set *hook-key* to *serial-key* and *hook-key?* to *serial-key?*: redirect stdin to the serial input
-CONOUT | func | | set *hook_emit* to *serial-emit*: redirect stdout to the serial output
-CON   | func | | redirect stdin and stdout to the serial interface
+VECTORS | pub | ( cnt — ) ( index — adr ) | create a vector table, at compile time create *cnt* vectors; execution return the *adr* of the vector number *index*
+.RSTACK | pub | | print out the contents of the return stack in hex
+FAULT | pub  | | simple fault handler, resets the system rather than taking any remedial actions
+!FAULT | pub | | word to install *FAULT* in the *irq-fault* vector
+QUIT! | pub  | ( f — ) | install function *f* in the *hook-quit* vector
+QUIT: | pub  | | defining word for new quit functions
+EMIT! | pub  | ( f — ) | install function *f* in the *hook-emit* vector
+KEY!  | pub  | ( f — ) | install function *f* in the *hook-key* vector
+!SERKEY | pub | | set *hook-key* to *serial-key* and *hook-key?* to *serial-key?*: redirect stdin to the serial input
+CONOUT | pub | | set *hook_emit* to *serial-emit*: redirect stdout to the serial output
+CON   | pub  | | redirect stdin and stdout to the serial interface
+CON?  | pub  | | check if console is being sent to serial port
 save-emit | var | | variable to save the value of *serial-emit*/*hook-emit* during muting
-MUTED | func | | save *hook-emit* in *save-emit*; set *hook-emit* to *DROP*
-UNMUTED | func | | restore *hook_emit* from *save-emit*
-!SP   | func | | init stack pointer: move the SP back to the top of the stack space
+MUTED | pub  | | save *hook-emit* in *save-emit*; set *hook-emit* to *DROP*
+UNMUTED | pub | | restore *hook_emit* from *save-emit*
+~mkey | var  | | variable holding the multi-key entry buffer pointer
+MKEY? | pri  | ( — addr ) | return the multi-key entry buffer pointer
+MKEY  | pri  | ( key — ) | look for new multi-key entries and increment *~mkey* or reset to using straight serial key routines
+MLOAD | pri  | ( addr — ) | initialise *~mkey* and direct import stream through the multi-key routines
+!SP   | pub  | | init stack pointer: move the SP back to the top of the stack space
 ~laps | var  | | array of two cells used by the timing tools (assuming a cell is 4 bytes)
-LAP   | func | | move *~laps[0]* → *~laps[1]*; then *cycles* → *~laps[0]*
-LAP@  | func | | return the time difference (in ms) between the last two calls to LAP
+LAP   | pub  | | move *~laps[0]* → *~laps[1]*; then *cycles* → *~laps[0]*
+LAP@  | pub  | | return the time difference (in ms) between the last two calls to LAP
 ~p    | var  | | variable holding saved copy of thread end
-?REPORT | func | | checks if the thread end position is inconsistent; if so it prints an error message
-EMITS | func | ( c u — ) | emit *u* consecutive copies of the character *c*
-EMITD | func | ( u — ) | lim. 0 <= *u* <= 9: convert *u* into the ascii equivalent digit and emit it
-TAB   | func | ( — ) | emit a tab character
-TABS  | func | ( u — ) | emit *u* tab characters
-INDENT | func | ( u — ) | emit a carriage return followed by *u* tabs
+?REPORT | pub | | checks if the thread end position is inconsistent; if so it prints an error message
+EMITS | pub  | ( c u — ) | emit *u* consecutive copies of the character *c*
+EMITD | pub  | ( u — ) | lim. 0 <= *u* <= 9: convert *u* into the ascii equivalent digit and emit it
+TAB   | pub  | ( — ) | emit a tab character
+TABS  | pub  | ( u — ) | emit *u* tab characters
+INDENT | pub | ( u — ) | emit a carriage return followed by *u* tabs
 @org  | var  | | variable: data space base pointer
 ~m    | var  | | variable: dictionary position
 ~o    | var  | | variable: data space tracker pointer
-mecrisp | func | | initialise *~m*, *~o*, stack and *~laps*
+mecrisp | pub | | initialise *~m*, *~o*, stack and *~laps*
 ctrls | VECTORS | | an array of 32 vectors corresponding to the 32 control keys; initialised to zeros
-CTRL! | func | ( cfa n — ) | *ctrls[n]* ← *cfa*: save the function address in the *n*th vector
+CTRL! | pub  | ( cfa n — ) | *ctrls[n]* ← *cfa*: save the function address in the *n*th vector
 ~k    | var  | | variable for last command entry
-REX   | func | | re-execute last entry
-DISCARD | func | | discard and reset the CLI **NOT SURE HOW THIS WORKS**
-      | key  | ^C | perform *RESET*
-      | key  | ^X | perform *REX*
-      | key  | esc | perform *DISCARD*
+REX   | pri  | | re-execute last entry
+DISCARD | pri | | discard and reset the CLI **NOT SURE HOW THIS WORKS**
+|     | key  | ^C | perform *RESET*
+|     | key  | ^X | perform *REX*
+|     | key  | esc | perform *DISCARD*
 ~polls | buffer: | | 16 byte background polling buffer (4 cells)
-!POLLS | func | | initialise the *~polls* buffer to all zeros
-@POLL | func | ( n — addr ) | return the address of the *n*th element of the *~polls* buffer
-POLLS | func | | execute the defined polls
-+POLL | func | ( cfa — ) | add a new polling routine, if there's space
-QKEY  | func | | polling loop waiting for input from serial interface
+!POLLS | pub | | initialise the *~polls* buffer to all zeros
+@POLL | pub  | ( n — addr ) | return the address of the *n*th element of the *~polls* buffer
+POLLS | pub  | | execute the defined polls
++POLL | pub  | ( cfa — ) | add a new polling routine, if there's space
+QKEY  | pub  | | polling loop waiting for input from serial interface
 ~defers | var | | a single deferred execution vector
 ~depth | var | | depth of deferred word
-defers | func | | execute the deferred word, if one exists: clears *~defers* before execution
-->    | func | | defer the execution of this word until the end of the line
-.base | func | | print the radix base prompt signal: '#' for decimal, '$' for hex, '%' for binary and '?' for anything else
-.depth | func | | print two digit depth
-.mode | func | | print 'R' for compile to ram mode or 'F' for compile to flash mode
-COMPEX | func | | *place saver*
+defers | pub | | execute the deferred word, if one exists: clears *~defers* before execution
+->    | pub  | | defer the execution of this word until the end of the line
+.base | pub  | | print the radix base prompt signal: '#' for decimal, '$' for hex, '%' for binary and '?' for anything else
+.depth | pub | | print two digit depth
+.mode | pub  | | print 'R' for compile to ram mode or 'F' for compile to flash mode
+COMPEX | pub | | *place saver*
 ~query | var | | pointer to cfa of *query*
-TACHYON | func | | main Tachyon user prompt: defined as the system quit function
+prompt | pub | | print the CLI prompt
+respond | pub | | print the execution operating response
+TACHYON | pub | | main Tachyon user prompt: defined as the system quit function
+|     |      | |
 DATA  | const | | ← $20030000: base for all data and buffers
-org   | func | ( n — ) | *org* ← *n*: update data space pointer with the given value
-org@  | func | ( — addr ) | return the address pointed to by the data space pointer
+org   | pub  | ( n — ) | *org* ← *n*: update data space pointer with the given value
+org@  | pub  | ( — addr ) | return the address pointed to by the data space pointer
 res   | pre  | ( n — ) | *org* ← *org* + *n*: reserve bytes in data space without assigning a name
 (bytes) | pri | ( n — ) | create a new constant of *n* bytes, updating *org* ← *org* + *n* afterwards
 bytes | pre  | ( n — ) | pre-emptive version of *(bytes)*: use *n* *bytes* *new_name*
 byte  | pre  | ( — ) | allocate a single byte constant
-alorg | func | ( n — ) | align *@org* on a boundary appropriate to the given value *n*: *n* should be a power of 2
+alorg | pub  | ( n — ) | align *@org* on a boundary appropriate to the given value *n*: *n* should be a power of 2
 (longs) | pri | ( n — ) | reserve space in the data space for *n* 32 bit long values
 longs | pre  | ( n — ) | pre-emptive version of *(longs)*
 long  | pre  | ( — ) | allocate space for a single 32 bit long value
-shift | func | ( n — ) | perform *<<* or *>>* automatically for *n* places depending upon the sign: negative shit right, positive shift left
+shift | pub  | ( n — ) | perform *<<* or *>>* automatically for *n* places depending upon the sign: negative shit right, positive shift left
+\>\|  | pub  | ( mask — bit ) | return the bit number of the rightmost bit within the provided mask
+\|<   | pub  | ( bit — mask ) | return a mask with bit number *bit* set
+bit   | pub  | ( bit — mask ) | synonym for \|<
+bits  | pub  | ( n1 bit — n2 ) | mask off the lower *bit* bits in *n1*
+ANDN  | pub  | ( n1 mask — n2 ) | clear the bits set in mask from the value *n1*
+\>N   | pub  | ( n1 — n2 ) | *n2* ← low 4 bits of *n1*
+\>B   | pub  | ( n1 — n2 ) | *n2* ← low 8 bits of *n1*
+\>W   | pub  | ( n1 — n2 ) | *n2* ← low 16 bits of *n1*
+W\>B  | pub  | ( w — lb hb ) | split word *w* into two 8 bit values
+L\>W  | pub  | ( long — lw hw ) | split long *long* into two 16 bit values
+HH!   | pub  | ( u addr — ) | *u* is a 16 bit value; update the higher 16 bits of the contents of *addr* with the value of *u*
+LH!   | pub  | ( u addr — ) | *u* is a 16 bit value; update the lower 16 bits of the contents of *addr* with the value of *u*
+HH@   | pub  | ( addr — u ) | fetch the higher 16 bits of the contents of *addr*
+~     | pub  | ( addr — ) | *[addr]* ← 0: clear the long value at *addr*
+~~    | pub  | ( addr — ) | *[addr]* ← -1: set the long value at *addr*
+C~    | pub  | ( addr — ) | *[addr]* ← 0: (8 bit) clear the byte value at *addr*
+C~~   | pub  | ( addr — ) | *[addr]* ← -1: (8 bit) set the byte value at *addr*
+++    | pub  | ( addr — ) | *[addr]* ← *[addr]* + 1: increment long value at *addr*
+--    | pub  | ( addr — ) | *[addr]* ← *[addr]* - 1: decrement long value at *addr*
+C++   | pub  | ( addr — ) | *[addr]* ← *[addr]* + 1: (8 bit) increment byte value at *addr*
+B++   | pub  | ( b a — b+1 a ) | add one to the second value on the stack
+C@++  | pub  | ( addr — addr+1 n ) | read a byte from *[addr]* and increment *addr*
+3RD   | pub  | ( u3 u2 u1 — u3 u2 u1 u3 ) | copy the third element from the stack
+4TH   | pub  | ( u4 u3 u2 u1 — u4 u3 u2 u1 u4) | copy the fourth element from the stack
+ERASE | pub  | ( addr len — ) | fill *len* bytes of memory starting at *addr* with zero
+WITHIN | pub | ( n min max — f ) | return true (1) if *n* is between *min* and *max* (inclusive)
+LIMIT | pub  | ( n min max — n ) | constrain *n* to *min* and *max*
+U/    | pub  | ( u1 u2 — u3 ) | *u3* ← floor(*u1* / *u2*)
+//    | pub  | ( u1 u2 — u3 ) | *u3* ← remainder(*u1* / *u2*)
+HMS   | pub  | ( #hhmmss — ss mm hh ) | divide hours, minutes and seconds from single value

@@ -6,7 +6,7 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2205102030 constant tme
+2205281900 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
@@ -62,46 +62,71 @@ pre PRINT"	['] ." execute ;
 
 		( create vector table )
 
-: VECTORS ( cnt -- ) ( index -- adr )
+pub VECTORS ( cnt -- ) ( index -- adr )
 	<BUILDS CELLS HERE OVER ALLOT SWAP 0 FILL
 	DOES> SWAP CELLS +
 ;
 
-: .RSTACK
+pub .RSTACK
     CRLF PRINT" RETURN STACK: " HEX
     RP@ 32 OVER + SWAP DO I @ . SPACE 4 +LOOP CRLF
 ;
 
 	( simple fault handler - resets rather than repeats )
 
-: FAULT		PRINT"    !address fault! " .RSTACK  RESET ;
-: !FAULT	['] FAULT irq-fault ! ;
+pub FAULT		PRINT"    !address fault! " .RSTACK  RESET ;
+pub !FAULT	['] FAULT irq-fault ! ;
 !FAULT
 
 	( hook control )
 
-: QUIT!			hook-quit ! ;
-: QUIT: 		' QUIT! QUIT ;
+pub QUIT!		hook-quit ! ;
+pub QUIT: 		' QUIT! QUIT ;
 
-: EMIT!			hook-emit ! ;
-: KEY!			hook-key ! ;
-: !SERKEY		['] serial-key KEY! ['] serial-key? hook-key? ! ;
-: CONOUT		['] serial-emit EMIT! ;
-: CON			CONOUT !SERKEY ;
+pub EMIT!		hook-emit ! ;
+pub KEY!		hook-key ! ;
+pub !SERKEY		['] serial-key KEY! ['] serial-key? hook-key? ! ;
+pub CONOUT		['] serial-emit EMIT! ;
+pub CON			CONOUT !SERKEY ;
+pub CON?		hook-emit @ ['] serial-emit = ;
 
 ' serial-emit variable save-emit
 --- muted output
-: MUTED			hook-emit @ save-emit ! ['] DROP EMIT!  ;
-: UNMUTED		save-emit @ EMIT! ;
+pub MUTED		hook-emit @ save-emit ! ['] DROP EMIT!  ;
+pub UNMUTED		save-emit @ EMIT! ;
+
+
+
+0 variable ~mkey
+pri MKEY?	~mkey @ ;
+pri MKEY ( key -- )
+    MKEY? C@ DUP
+    IF 1 ~mkey +!
+    ELSE
+    ['] serial-key hook-key !
+    ['] serial-key? hook-key? !
+    THEN
+;
+pri MLOAD ( addr -- )
+    ~mkey !
+    ['] MKEY hook-key !
+    ['] MKEY? hook-key? !
+;
+
+
+
+
+
+
 
 \ Init Stack Pointer
-: !SP			SP@ DEPTH 1- CELLS + SP! ;
+pub !SP			SP@ DEPTH 1- CELLS + SP! ;
 
 	( *** TIMING TOOLS *** )
 
 0 variable ~laps 4 allot
-: LAP 			cycles ~laps @ ~laps CELL+ ! ~laps ! ;
-: LAP@
+pub LAP 		cycles ~laps @ ~laps CELL+ ! ~laps ! ;
+pub LAP@
 	~laps @ ~laps CELL+ @ -
 	LAP LAP ~laps @ ~laps CELL+ @ - -
 ;
@@ -112,7 +137,7 @@ pre PRINT"	['] ." execute ;
 
 0 variable ~p
 \ TO DO: does not work in compiletoflash mode
-: ?REPORT
+pub ?REPORT
     (latest) @ ~p @ <>
     IF CRLF PRINT" --- "
       (latest) @ DUP ~p !
@@ -120,18 +145,19 @@ pre PRINT"	['] ." execute ;
     THEN
 ;
 
-: EMITS	( ch cnt -- )	0 do dup emit loop drop ;
+pub EMITS	( ch cnt -- )	0 do dup emit loop drop ;
 
-: EMITD ( 0...9 -- )	9 MIN $30 + EMIT ;
+pub EMITD ( 0...9 -- )	9 MIN $30 + EMIT ;
 
-: TAB		9 EMIT ;
-: TABS		9 SWAP EMITS ;
-: INDENT	CR TABS ;
+pub TAB		9 EMIT ;
+pub TABS		9 SWAP EMITS ;
+pub INDENT	CR TABS ;
 
 0 variable @org				\ data space pointer
 0 variable ~m
 0 variable ~o
-: mecrisp	HERE ~m ! @org @ ~o ! !SP CRLF LAP ;
+--- place mecrisp into block load mode via TACHYON QUIT
+pub mecrisp	HERE ~m ! @org @ ~o ! !SP CRLF LAP ;
 
 
 	( CONSOLE CONTROL KEYS )
@@ -142,18 +168,18 @@ pre PRINT"	['] ." execute ;
 0 ctrls 128 0 FILL
 
 --- Set vector of control key n with cfa
-: CTRL! ( cfa n -- )  	ctrls ! ;
+pub CTRL! ( cfa n -- )  	ctrls ! ;
 
 \ USER DEBUG HOOK
 \ 0 variable 'debug
-\ : DEBUG		'debug @ ?DUP IF execute THEN $0D ;
+\ pub DEBUG		'debug @ ?DUP IF execute THEN $0D ;
 
 0 variable ~k
 \ re-execute last entry
-: REX		~k C@ rp@ 16 + ! ;
+pri REX		~k C@ rp@ 16 + ! ;
 
 \ discard and reset the CLI
-: DISCARD	2DUP $20 FILL $0D EMIT $2D 80 EMITS ;
+pri DISCARD	2DUP $20 FILL $0D EMIT $2D 80 EMITS ;
 
 \ setup some control keys so far
 ' RESET 	^ C CTRL!
@@ -165,13 +191,13 @@ pre PRINT"	['] ." execute ;
 
 16 buffer: ~polls
 
-: !POLLS			~polls 16 0 FILL ;
+pub !POLLS			~polls 16 0 FILL ;
 !POLLS
-: @POLL ( index -- addr )	CELLS ~polls + ;
-: POLLS
+pub @POLL ( index -- addr )	CELLS ~polls + ;
+pub POLLS
 	4 0 DO I @POLL @ ?DUP IF EXECUTE THEN LOOP
 ;
-: +POLL ( cfa -- )
+pub +POLL ( cfa -- )
 	4 0 DO I @POLL @ 0= IF DUP I @POLL ! LEAVE THEN LOOP DROP
 ;
 {
@@ -181,10 +207,28 @@ R00# ' poll1 +poll ---
 R00# x1 @ . --- 2850947
 R00# X1 @ . --- 5563090
 }
+{
+
+pub EDKEY ( --- code )
+    KEY DUP $1B =
+    IF  cycles SWAP
+      BEGIN KEY?
+---                ignore ;      else merge to code       update timeout
+        IF KEY DUP ` ; = IF DROP ELSE SWAP 8 << OR THEN   NIP cycles SWAP THEN
+---     timeout after 3ms of inactivity - must be end of sequence
+        OVER cycles - ABS 3000 >
+      UNTIL NIP
+    THEN DUP ~skeys !
+;
+
+--- diagnostic to check key sequences
+pri CHKKEYS BEGIN CRLF EDKEY DUP .L 3 = UNTIL ;
 
 
+}
 
-: QKEY
+
+pub QKEY
     BEGIN serial-key? 0= WHILE POLLS REPEAT
     serial-key DUP $20 <
     IF DUP ctrls @ ?DUP IF NIP EXECUTE $0D THEN THEN
@@ -193,15 +237,15 @@ R00# X1 @ . --- 5563090
 0 variable ~defers  ( note: just a single deferred execution vector for now)
 0 variable ~depth
 --- execute deferred words at the end of the line
-: defers
+pub defers
 	~defers @ ?DUP IF 0 ~defers ! execute THEN
 
 ;
 --- defer the exection of this word until the end of the line
-: ->	R> ~defers ! DEPTH ~depth C! ;
+pub ->	R> ~defers ! DEPTH ~depth C! ;
 
 --- Print radix base prompt symbol
-: .base
+pub .base
       base @					\ change prompt to indicate base
       case \ show base.
 	#10 of ." #" endof			\ # decimal
@@ -210,19 +254,23 @@ R00# X1 @ . --- 5563090
 	." ?"					\ other base
       endcase
 ;
-: .depth	depth 10 /MOD EMITD EMITD ;
-: .mode		compiletoram? if ." R" else ." F" then ;
+pub .depth	depth 10 /MOD EMITD EMITD ;
+pub .mode		compiletoram? if ." R" else ." F" then ;
 
 --- placeholder for compex magic - maybe
-: COMPEX
+pub COMPEX
 
 ;
 
+--- setup query vector - defined later
 ' query variable ~query
+
+pub prompt	CRLF .mode .depth .base space ;
+pub respond	PRINT" --- " ;
 
 		( USER PROMPT )
 
-: TACHYON ( -- )
+pub TACHYON ( -- )
   $BF00 ['] QUIT 4 + H!				\ DISABLE STACK RESET
   !FAULT					\ Simple report and reset handler
   (latest) @ ~p !				\ dictionary match register
@@ -234,14 +282,14 @@ R00# X1 @ . --- 5563090
       UNMUTED ?REPORT				\ but report new defs
       SPACE INTERPRET				\ and interpret/compile
     ELSE					\ else console mode
-      CRLF .mode .depth .base space
-      hook-key @ ['] serial-key =
+      prompt
+      hook-key @ ['] serial-key =		\ fix console to handle controls
       IF
         ['] QKEY KEY!				\ Use control key manager
-        ~query @ execute PRINT" --- "		\ get input and --- separate from response
+        ~query @ execute respond		\ get input and --- separate from response
         !SERKEY					\ switch back to standard key input
       ELSE
-	~query @ execute PRINT" --- "		\ get input and --- separate from response
+	~query @ execute respond		\ get input and --- separate from response
       THEN
       current-source @ ~k !			\ remember position for ^X re-execute
       interpret					\ interpret/compile
@@ -265,16 +313,16 @@ QUIT: TACHYON
 
 $20030000 constant DATA			\ base for all data and buffers
 
-\ 0 variable @org				\ data space pointer
-
-: org				@org ! ;
-: org@				@org @ DATA + ;
+\ 0 variable @org	`			\ data space pointer
+--- org uses a relative offset from DATA (or absolute - DATA )
+pub org				DUP DATA >= IF DATA - THEN @org ! ;
+pub org@				@org @ DATA + ;
 ( reserve bytes but do not assign a name )
 pre res				@org +! ['] \ execute ;
 pri (bytes)			org@ ['] constant execute @org +! ;
 pre bytes			(bytes) ;
 pre byte			1 (bytes) ;
-: alorg				1- @org @ OVER + SWAP NOT AND org ;
+pub alorg				1- @org @ OVER + SWAP NOT AND org ;
 pri (longs)			4 alorg 2* 2* (bytes) ;
 pre longs			(longs) ;
 pre long			1 (longs) ;
@@ -283,64 +331,65 @@ pre long			1 (longs) ;
 	( some Tachyon like utility words )
 
 
-: shift ( n +/-cnt -- )		DUP 0< IF NEGATE >> ELSE << THEN ;
+pub shift ( n +/-cnt -- )		DUP 0< IF NEGATE >> ELSE << THEN ;
 --- convert bit to mask
-: |< ( b -- m )			1 SWAP << ;
-: bit ( bit -- mask )		1 SWAP << ;
-: >| ( mask -- bit )		0 BEGIN OVER 1 AND 0= WHILE SWAP 2/ SWAP 1+ REPEAT NIP ;
-pri BITS ( n b -- n2 )		|< 1- AND ;
+pub >| ( mask -- bit )		0 BEGIN OVER 1 AND 0= WHILE SWAP 2/ SWAP 1+ REPEAT NIP ;
+pub |< ( b -- m )		1 SWAP << ;
+pub bit ( bit -- mask )		|< ;
+--- mask b bits pf n
+pub bits ( n b -- n2 )		|< 1- AND ;
 
-: ANDN				-1 XOR AND ;
+--- AND NOT - AND the inverted mask to n ( i.e. $1234 $0F ANDN -> $1230
+pub ANDN ( n m -- n2 )		-1 XOR AND ;
 
 ---
-: >N				4 BITS ;
-: >B				8 BITS ;
-: >W 				16 << 16 >> ;
-: W>B ( w -- lb hb )		DUP 8 BITS SWAP 8 >> ;
-: L>W ( long -- lw hw )		DUP 16 BITS SWAP 16 >> ;
+pub >N				4 BITS ;
+pub >B				8 BITS ;
+pub >W 				16 << 16 >> ;
+pub W>B ( w -- lb hb )		DUP 8 BITS SWAP 8 >> ;
+pub L>W ( long -- lw hw )		DUP 16 BITS SWAP 16 >> ;
 
-: HH!  				SWAP 16 << OVER @ 16 << 16 >> OR SWAP ! ;
-: LH! 				SWAP OVER @ 16 >> 16 << OR SWAP ! ;
-: HH@				@ 16 >> ;
+pub HH!  				SWAP 16 << OVER @ 16 << 16 >> OR SWAP ! ;
+pub LH! 				SWAP OVER @ 16 >> 16 << OR SWAP ! ;
+pub HH@				@ 16 >> ;
 
 --- clear and set long
-: ~				0 SWAP ! ;
-: ~~				-1 SWAP ! ;
+pub ~				0 SWAP ! ;
+pub ~~				-1 SWAP ! ;
 --- clear and set byte
-: C~ ( addr -- )		0 SWAP C! ;
-: C~~ ( addr -- )		-1 SWAP C! ;
+pub C~ ( addr -- )		0 SWAP C! ;
+pub C~~ ( addr -- )		-1 SWAP C! ;
 --- increment long
-: ++				1 SWAP +! ;
-: --				-1 SWAP +! ;
+pub ++				1 SWAP +! ;
+pub --				-1 SWAP +! ;
 --- increment byte
-: C++				1 SWAP C+! ;
+pub C++				1 SWAP C+! ;
 --- increment B (TOS+1)
-: B++ ( b a -- b+1 a )		SWAP 1+ SWAP ;
+pub B++ ( b a -- b+1 a )		SWAP 1+ SWAP ;
 
-: C@++ ( adr -- adr+1 n )	DUP 1+ SWAP C@ ;
+pub C@++ ( adr -- adr+1 n )	DUP 1+ SWAP C@ ;
 
-: 3RD				2 PICK ;
-: 4TH				3 PICK ;
+pub 3RD				2 PICK ;
+pub 4TH				3 PICK ;
 
-: ERASE				0 FILL ;
+pub ERASE				0 FILL ;
 
-: WITHIN ( n min max -- f ) 	2 PICK >= ROT ROT >= AND ;
-: LIMIT ( n min max -- n )	>R MAX R> MIN ;
-: U/				1 SWAP U*/MOD NIP ;
-: //				MOD ;
+pub WITHIN ( n min max -- f ) 	2 PICK >= ROT ROT >= AND ;
+pub LIMIT ( n min max -- n )	>R MAX R> MIN ;
+pub U/				1 SWAP U*/MOD NIP ;
+pub //				MOD ;
 
 --- HOURS MINS SECS
-: HMS ( #xxyyzz -- zz yy xx ) 100 U/MOD 100 U/MOD ;
+pub HMS ( #xxyyzz -- zz yy xx ) 100 U/MOD 100 U/MOD ;
 
 
 	( unit multipliers )
 
---- MEGA multiplier
-: KB			10 << ;
-: MB			20 << ;
-: M			1000000 * ;
+pub KB			10 << ;
+pub MB			20 << ;
+pub M			1000000 * ;
 \ seconds
-: s			1000 * ms ;
+pub s			1000 * ms ;
 
 1 constant ON
 0 constant OFF
@@ -352,37 +401,37 @@ pri BITS ( n b -- n2 )		|< 1- AND ;
 	( simple conditional EXIT words )
 
 \ Exit if zero
-: 0EXIT		0= IF R> DROP THEN ;
+pub 0EXIT		0= IF R> DROP THEN ;
 \ Exit if true
-: ?EXIT		IF R> DROP THEN ;
+pub ?EXIT		IF R> DROP THEN ;
 
 
 
 \	--- UNALIGNED LONGS ---
 0 variable ~u
-: U@		~u 4 MOVE ~u @ ;
-: U!		SWAP ~u ! ~u SWAP 4 MOVE ;
+pub U@		~u 4 MOVE ~u @ ;
+pub U!		SWAP ~u ! ~u SWAP 4 MOVE ;
 
 	( stack globals )
 
 long ~a
-: ant!	~a ! ;
-: ant	~a @ ;
+pub ant!	~a ! ;
+pub ant	~a @ ;
 long ~b
-: bat!	~b ! ;
-: bat	~b @ ;
+pub bat!	~b ! ;
+pub bat	~b @ ;
 long ~c
-: cat!	~c ! ;
-: cat	~c @ ;
+pub cat!	~c ! ;
+pub cat	~c @ ;
 long ~d
-: dog!	~d ! ;
-: dog	~d @ ;
+pub dog!	~d ! ;
+pub dog	~d @ ;
 long ~e
-: emu!	~e ! ;
-: emu	~e @ ;
+pub emu!	~e ! ;
+pub emu	~e @ ;
 long ~f
-: fox!	~f ! ;
-: fox	~f @ ;
+pub fox!	~f ! ;
+pub fox	~f @ ;
 {
 8 longs vars
 : @var	2 << vars +  ;
@@ -398,9 +447,9 @@ long ~f
 }
 
 	( bit on byte flags ops )
-: SET ( mask adr -- )	DUP C@ ROT OR SWAP C! ;
-: CLR ( mask adr -- )	DUP C@ ROT NOT AND SWAP C! ;
-: SET? 			C@ AND ;
+pub SET ( mask adr -- )		DUP C@ ROT OR SWAP C! ;
+pub CLR ( mask adr -- )		DUP C@ ROT NOT AND SWAP C! ;
+pub SET? 			C@ AND ;
 
 	( more useful bit manipulation in longs )
 pub SETB ( bit adr -- )		DUP @ ROT BIT OR SWAP ! ;
@@ -410,8 +459,15 @@ pub BIT? ( bit adr -- f )	@ SWAP BIT AND ;
 
  	( null terminated strings )
 
---- store nullterm string
-pub $! ( src dst -- )	BEGIN OVER C@ OVER C! OVER C@ WHILE b++ 1+ REPEAT 2DROP ;
+--- store nullterm or counted string as nullterm string
+\ pub $! ( src dst -- )	BEGIN OVER C@ OVER C! OVER C@ WHILE b++ 1+ REPEAT 2DROP ;
+pub $! ( src dst -- )
+    OVER 64 < IF ( src cnt dst )  2DUP + C~ SWAP MOVE
+    ELSE  BEGIN OVER C@ OVER C! OVER C@ WHILE b++ 1+ REPEAT 2DROP
+    THEN
+;
+
+
 --- Find length of nullterm string
 pub LEN$ ( str -- len )	0 SWAP BEGIN DUP C@ WHILE B++ 1+ REPEAT DROP ;
 --- print nullterm string
@@ -421,7 +477,6 @@ pub a>A ( ch -- ch )	DUP $60 > OVER $7B < AND IF $20 - THEN ;
 
 
 
-: CON?		hook-emit @ ['] serial-emit = ;
 
 
 
@@ -452,6 +507,7 @@ pri CSI ( ch -- )		ESC[ EMIT ;
 pub HOME			` H CSI ;
 
 pri COL ( col fg/bg -- )	CSI ` 0 + EMIT ` m EMIT ;
+\ pri COL ( col fg/bg -- )	CSI 0 <# #S #> TYPE ` m EMIT ;
 pub PEN! ( col -- )		dup ~pen ! 7 AND ` 3 COL ; --- 1B 5B 33 m
 pub PEN ( col -- )		DUP ~pen C@ <> IF PEN! ELSE DROP THEN ;
 
@@ -498,38 +554,43 @@ pub EMOJI ( ch -- )		$F0 EMIT $9F EMIT DUP 6 >> $98 + EMIT $3F AND $80 + EMIT ;
 	( *** PRINT HEX & BINARY *** )
 
 
-: .HEX ( n cnt -- ) HEX  <# 0 DO # LOOP #> TYPE DECIMAL ;
-: .B		0 2 .HEX ;
-: .H		0 4 .HEX ;
-: .L	   	0 8 .HEX ;
-: .BIN		32 0 DO I IF I 3 AND 0= IF $5F EMIT THEN  THEN ROL DUP 1 AND EMITD LOOP DROP ;
-: .BYTE		` $ EMIT .B ;
+pub .HEX ( n cnt -- ) HEX  <# 0 DO # LOOP #> TYPE DECIMAL ;
+pub .B		0 2 .HEX ;
+pub .H		0 4 .HEX ;
+pub .L	   	0 8 .HEX ;
+pub .BINX
+    32 OVER - ROT SWAP <<  SWAP 0
+    DO I IF I 3 AND 0= IF $5F EMIT THEN  THEN ROL DUP 1 AND EMITD LOOP
+    DROP ;
+pub .BIN	32 .BINX ;
+pub .BIN8	8 .BINX ;
+pub .BYTE	` $ EMIT .B ;
 
 	( *** PRINT DECIMAL NUMBER *** )
 
 $20 variable ~z --- leading character
 
 \ unsigned double right justify to cnt places with leading spaces as default
-: D.R ( d. cnt -- )
+pub D.R ( d. cnt -- )
 	<# 0 DO 2DUP OR IF # ELSE I 0= IF $30 ELSE ~z C@ THEN HOLD THEN LOOP #> TYPE
 ---	reset default leading character
 	$20 ~z C!
 ;
 \ unsigned right justify to cnt places with leading spaces as default
-: U.R ( u cnt -- )	0 SWAP D.R ;
+pub U.R ( u cnt -- )	0 SWAP D.R ;
 \ use leading zeros for next print
-: Z			$30 ~z C! ;
+pub Z			$30 ~z C! ;
 
 \ print wihh commas in western decimal format
-: D.DEC		DECIMAL <# BEGIN 2DUP 999. D> WHILE # # # $2C HOLD REPEAT #S #> TYPE ;
-: .DEC		0 D.DEC ;
-: .DEC2		DECIMAL 0 <# # # #> TYPE ;
-: .DEC4		DECIMAL 0 <# # # # # #> TYPE ;
+pub D.DEC		DECIMAL <# BEGIN 2DUP 999. D> WHILE # # # $2C HOLD REPEAT #S #> TYPE ;
+pub .DEC		0 D.DEC ;
+pub .DEC2		DECIMAL 0 <# # # #> TYPE ;
+pub .DEC4		DECIMAL 0 <# # # # # #> TYPE ;
 
 
 0 VARIABLE ~dp
 \ Print comma decimal number over cnt places including commas used
-: D.DECS ( d. cnt -- )
+pub D.DECS ( d. cnt -- )
 	~dp 1+ C! ~dp C~ DECIMAL
 	<# 2DUP OR
 	   IF
@@ -539,7 +600,7 @@ $20 variable ~z --- leading character
 	   THEN
 	#>
 	~dp 1+ C@ ~dp C@ - SPACES TYPE ;
-: .DECS ( n cnt -- )	0 SWAP D.DECS ;
+pub .DECS ( n cnt -- )	0 SWAP D.DECS ;
 
 \ print n to decimal places dp to fit width w
 pub .DP ( n w dp -- )		ROT 0 <# ROT 0 DO # LOOP ` . HOLD #S #> ROT OVER - SPACES TYPE ;
@@ -552,10 +613,10 @@ pub SPINNER	~sp C@ 3 AND s" |/-\" DROP + C@ EMIT 8 EMIT ~sp C++ ;
 
 	( TIMING REPORTING TOOLS )
 
-: .LAP			LAP@ .DEC PRINT" us" ;
-: .LAPS ( n -- )	LAP@ 1000 ROT */ .DEC PRINT" ns" ;
+pub .LAP			LAP@ .DEC PRINT" us" ;
+pub .LAPS ( n -- )	LAP@ 1000 ROT */ .DEC PRINT" ns" ;
 
-: *END*
+pub *END*
 	lap
 	CRLF PRINT" End of load - "
 	HERE ~m @ - PRINT
@@ -572,7 +633,7 @@ pub SPINNER	~sp C@ 3 AND s" |/-\" DROP + C@ EMIT 8 EMIT ~sp C++ ;
 
 \ !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
 \ Emit character but substiture if non-printing.
-: AEMIT ( ch sub --)	SWAP DUP $20 < OVER $7E > OR IF DROP ELSE NIP THEN EMIT ;
+pub AEMIT ( ch sub --)	SWAP DUP $20 < OVER $7E > OR IF DROP ELSE NIP THEN EMIT ;
 
 	( DEVICE MEMORY OPERATORS )
 
@@ -582,18 +643,18 @@ pub SPINNER	~sp C@ 3 AND s" |/-\" DROP + C@ EMIT 8 EMIT ~sp C++ ;
 ' C@ variable ~dmc
 
            ( DUMP MEMORY OPERATORS )
-: DMC@		~dmc @ EXECUTE ;
-: DMH@		~dmh @ EXECUTE ;
-: DM@		~dm @ EXECUTE ;
+pub DMC@	~dmc @ EXECUTE ;
+pub DMH@	~dmh @ EXECUTE ;
+pub DM@		~dm @ EXECUTE ;
 
 ( @ H@ C@ -- ) ( SET DUMP MEMORY OPERATORS )
-: DUMP!		~dm ! ~dmh ! ~dmc ! ;
-: MEM		['] C@ ['] H@ ['] @ DUMP! ;
-: PRINT:	PRINT" : " ;
-: .ADDR		CRLF .L PRINT: ;
-: (DUMPA)	BOUNDS DO I DMC@ $20 AEMIT LOOP ;
-: .BYTES	BOUNDS DO I DMC@ .B SPACE LOOP ;
-: DUMP
+pub DUMP!	~dm ! ~dmh ! ~dmc ! ;
+pub MEM		['] C@ ['] H@ ['] @ DUMP! ;
+pub PRINT:	PRINT" : " ;
+pub .ADDR	CRLF .L PRINT: ;
+pub (DUMPA)	BOUNDS DO I DMC@ $20 AEMIT LOOP ;
+pub .BYTES	BOUNDS DO I DMC@ .B SPACE LOOP ;
+pub DUMP
       ~dmc @ 0= IF MEM THEN
        BOUNDS DO
          I .ADDR
@@ -604,30 +665,30 @@ pub SPINNER	~sp C@ 3 AND s" |/-\" DROP + C@ EMIT 8 EMIT ~sp C++ ;
        16 +LOOP
        MEM
        ;
-: DUMPA		BOUNDS DO I .ADDR I 64 (DUMPA) 64 +LOOP	MEM ;
-: DUMPAW	BOUNDS DO I .ADDR I 128 (DUMPA) 128 +LOOP MEM ;
-: DUMPL
+pub DUMPA	BOUNDS DO I .ADDR I 64 (DUMPA) 64 +LOOP	MEM ;
+pub DUMPAW	BOUNDS DO I .ADDR I 128 (DUMPA) 128 +LOOP MEM ;
+pub DUMPL
 	BOUNDS DO I .ADDR
 	  I 32 BOUNDS DO I DM@ .L SPACE 4 +LOOP
 	32 +LOOP MEM ;
-: DUMPH
+pub DUMPH
 	BOUNDS DO I .ADDR
 	  I 32 BOUNDS DO I DMH@ .H SPACE 2 +LOOP
 	32 +LOOP MEM ;
 
 \ QUICK DUMP
-: QD	$40 DUMP ;
+pub QD	$40 DUMP ;
 
 {
 
-: MAP 	BOUNDS DO I $7FFF AND 0= IF I .ADDR THEN  0 I 1024 BOUNDS DO I C@ + LOOP .B SPACE 1024 +LOOP ;
+pub MAP 	BOUNDS DO I $7FFF AND 0= IF I .ADDR THEN  0 I 1024 BOUNDS DO I C@ + LOOP .B SPACE 1024 +LOOP ;
 
 }
 
 
 	( BETTER STACK LIST )
 
-: .S	DEPTH ?DUP
+pub .S	DEPTH ?DUP
 	IF 64 UMIN
 	  0 DO CRLF I PRINT PRINT:
 	  I PICK >B $20 AEMIT SPACE
@@ -637,13 +698,13 @@ pub SPINNER	~sp C@ 3 AND s" |/-\" DROP + C@ EMIT 8 EMIT ~sp C++ ;
 	;
 
 
-: >NFA		1- BEGIN 2- DUP C@ $20 < UNTIL 1+ ;
-: >LFA     	 >NFA 6 - ;
+pub >NFA	1- BEGIN 2- DUP C@ $20 < UNTIL 1+ ;
+pub >LFA     	 >NFA 6 - ;
 
-: NFA'		' >NFA ;
+pub NFA'	' >NFA ;
 
 \ RENAME A WORD IN THE DICTIONARY WITH A ANOTHER WORD - MUST MATCH LENGTHS.
-\ : RENAME:	' >NFA DUP C@ TOKEN 2 PICK =  IF ROT 1+ ROT MOVE ELSE DROP 2DROP THEN ;
+\ pub RENAME:	' >NFA DUP C@ TOKEN 2 PICK =  IF ROT 1+ ROT MOVE ELSE DROP 2DROP THEN ;
 
 \ rename: words lists
 
@@ -657,7 +718,7 @@ or <count> nwords
 0 variable ~n
 80 variable tw		--- default terminal width
 
-: HIGHLIGHT
+pub HIGHLIGHT
     plain
     DUP 4 + H@ CASE
       $40 OF magenta pen ENDOF
@@ -668,7 +729,7 @@ or <count> nwords
       green pen THEN
     ENDCASE
 ;
-: nwords ( max -- )
+pub nwords ( max -- )
 	0 ~n !
 	dictionarystart
 	BEGIN
@@ -690,15 +751,15 @@ or <count> nwords
 
 	REPEAT 2DROP
 ;
-: qw		20 nwords ;
-: words		-1 nwords ;
+pub qw		20 nwords ;
+pub words	-1 nwords ;
 
 
 
 
 	( ENHAHCE SEE TO DISPLAY HEADER )
 
-: .HEAD
+pub .HEAD
     CRLF DUP >LFA DUP .L PRINT: @
     $5B EMIT .L ." ] {"
     DUP >NFA 2- H@ .H ." } "
@@ -706,8 +767,8 @@ or <count> nwords
     BOUNDS DO SPACE I C@ .B LOOP
     CRLF PRINT" CODE:"
 ;
-: SEE		>IN C@ ' .HEAD >IN C! SEE ;
-: DASM ( CODE -- )   disasm-$ ! seec ;
+pub SEE		>IN C@ ' .HEAD >IN C! SEE ;
+pub DASM ( CODE -- )   disasm-$ ! seec ;
 
 
 
@@ -722,7 +783,7 @@ pub FORGET	'   ?DUP IF >LFA DUP @ @words ! @code ! ELSE DROP THEN ;
 
 
 $40008040 constant clksysdiv
-: clk! 		8 << clksysdiv ! ;
+pub clk! 		8 << clksysdiv ! ;
 
 $40024000 constant xosc
 
@@ -765,7 +826,7 @@ $40028000 constant PLLSYS
 
 ( SIO REGISTERS )
 
-: SIO	$D0000000 + ;
+pub SIO	$D0000000 + ;
 
 $004 constant IOIN
 $010 constant IOOUT
@@ -881,11 +942,12 @@ SPIO0	TX	UART1	RTS	I2C1	SCL	PWM3	B	SIO	PIO0	PIO1
 : PIN? ( pin -- pin bit ) IOIN SIO@ OVER >> 1 AND ;
 : HIGH ( pin -- )	bit DUP IOSET SIO! OESET SIO! ;
 : LOW ( pin -- )	bit DUP IOCLR SIO! OESET SIO! ;
+: TOGGLE ( pin -- ) 	bit DUP IOXOR SIO! OESET SIO! ;
 : PIN! ( b0 pin -- )	SWAP 1 AND IF HIGH ELSE LOW THEN ;
 
-: WAITHI ( pin -- )		BEGIN PIN? UNTIL LAP DROP ;
-: WAITLO  ( pin -- )		BEGIN PIN? 0= UNTIL LAP DROP ;
-: WAITEDGE ( pin -- ) 		DUP PIN@ IF WAITLO ELSE WAITHI THEN ;
+: WAITHI ( pin -- )	BEGIN PIN? UNTIL LAP DROP ;
+: WAITLO  ( pin -- )	BEGIN PIN? 0= UNTIL LAP DROP ;
+: WAITEDGE ( pin -- ) 	DUP PIN@ IF WAITLO ELSE WAITHI THEN ;
 
 
 long ~pin
@@ -903,13 +965,14 @@ long ~pin
 ;
 : .PIN ( pin -- )
       SPACE DUP .FNC
+      SPACE DUP PAD@ SPACE .BIN8 SPACE
       SPACE DUP bit IOOE @ AND IF ." OUT " ELSE ." INP " THEN
       SPACE DUP PIN@ IF ` H ELSE ` L THEN EMIT
       SPACE DUP GPSR @ .L
       SPACE GPCR @ .L
 ;
 : lsio
-    CRLF REVERSE UL BOLD PRINT" PIN FNC  DIR  S GPSR     GPCR    " PLAIN
+    CRLF REVERSE UL BOLD PRINT" PIN FNC   PAD        DIR  S GPSR     GPCR    " PLAIN
     30 0 DO
       CRLF I .DEC2 I .PIN
     LOOP
@@ -1438,16 +1501,20 @@ pub SDPINS ( csdodick -- ) ~sdpins ! SDCK bit &sdck ! ;
 org@ sdvars -	constant sdsz	--- size of array used to hold all raw SD card related values + FAT etc
 
 14	bytes cwd$
+{
+SDIO notes
+4) DAT1 line may be used as Interrupt Output (from the Card) in SDIO mode during all the times that it is not in use for data
+transfer operations (refer to "SDIO Card Specification" for further details).
+5) DAT2 line may be used as Read Wait signal in SDIO mode (refer to "SDIO Card Specification" for further details).
 
+}
 
 
 : SDIO
     $CA SDDO PAD!
     $53 SDCK PAD!
     $5B SDDI PAD!
-    $62 SDCS PAD!
-    $5A 13 PAD!
-    $5A 14 PAD!
+    $63 SDCS PAD!
     SDCS LOW   SDCK LOW   SDDI HIGH  SDCS HIGH
 ;
 
@@ -1499,7 +1566,7 @@ org@ sdvars -	constant sdsz	--- size of array used to hold all raw SD card relat
 
 
 : CMD0		5 0 DO 0 0 CMD 1 = IF LEAVE THEN LOOP _sdres C@ ;
-: CMD8		5 0 DO $1AA 8 CMD 1 = IF LEAVE THEN LOOP _sdres C@ ;
+: CMD8		10 0 DO $1AA 8 CMD 1 = IF LEAVE THEN LOOP _sdres C@ ;
 : CMD8?		SPIRL $1AA = ;
 
 
@@ -1507,9 +1574,11 @@ org@ sdvars -	constant sdsz	--- size of array used to hold all raw SD card relat
 : SLOWCLK	SDDI HIGH 200 0 DO SDCK HIGH 2 us SDCK LOW 2 us LOOP ;
 : ACMD41?	0 1000 0 DO ACMD41 IF SLOWCLK ELSE 1+ LEAVE THEN LOOP ;
 
+--- init the SD interface and exit on any problem  - _sdcmd of 9 indicates success
 : !SD!
-	SDIO 0 ocr ! cid 16 ERASE csd 16 ERASE
-	CMD0 0EXIT
+	sdvars sdsz ERASE
+	10000 SDCLKS
+	CMD0 1 = 0EXIT
 	CMD8  0EXIT
 	CMD8? 0EXIT
 	ACMD41? 0EXIT
@@ -1565,15 +1634,22 @@ org@ sdvars -	constant sdsz	--- size of array used to hold all raw SD card relat
 	PRINT"  BAD CID "
 	;
 
-\ Initialise the SD card in SPI mode and return with the OCR
-\ pub !SD ( -- ocr|false )
-: !SD ( --- ocr|false )
-	sdvars sdsz ERASE readsect ~~
+{
+Initialise the SD card in SPI mode and return with the OCR
+
+6.4.1.1 Power Up Time of Card
+A device shall be ready to accept the first command within 1ms from detecting VDD min.
+Device may use up to 74 clocks for preparation before receiving the first command
+
+}
+pub !SD ( --- ocr|false )
+	readsect ~~
 	SDBUF $400 ERASE
-	SD? IF
-	  3 SDCLKS 20 0 DO
+	4000 SDCLKS
+	SDIO SD? IF
+	  10 SDCLKS 5 0 DO
 \	    attempt init and check if last operation was 9
-	    !SD! _sdcmd C@ 9 =  IF LEAVE ELSE 512 SDCLKS THEN
+	    !SD! _sdcmd C@ 9 =  IF LEAVE ELSE 1024 SDCLKS THEN
 	  LOOP SDIO 100 SDCLKS
 	  69 48 CSD@ 1+ 10 <<  sdsize !
 	THEN
@@ -1914,7 +1990,7 @@ pub GETPART
 
 pub !MOUNT
 	!FAULT
-	SD? 0EXIT \ ( !SD DROP !SD DROP ) !SD 0EXIT
+	SDIO SD? 0EXIT \ ( !SD DROP !SD DROP ) !SD 0EXIT
 	!SD 0EXIT
 	1 SECTORF DROP
 	!SD 0EXIT
@@ -1930,7 +2006,7 @@ pub !MOUNT
 pub MOUNT
 	!MOUNT SD? IF .CARD THEN
 	;
-
+pub .MOUNT 	SD? IF cyan pen CRLF PRINT" MOUNTING " MOUNT THEN ;
 
 \	MOUNT FAT32 if not already mounted
 pub ?MOUNT
@@ -2031,11 +2107,11 @@ pri DODIR
 ;
 
 pub LIST: ( method -- )	~dir ! DODIR ;
-pri DIR: ( method -- )	?MOUNT CRLF volname 11 TYPE LIST: ;
+pri DIR: ( method -- )	MOUNTED? IF CRLF volname 11 TYPE LIST: THEN ;
 
 1 bytes ~x
 
-pri DODIRX		fq C@ ~x C@ MOD 0= IF CRLF THEN .FNAME 4 SPACES fq C++ ;
+pri DODIRX		fq C@ ~x C@ MOD 0= IF CRLF THEN .FNAME fq C++ ;
 pub DIRX ( n -- )  	~x C! ['] DODIRX DIR:  ;
 
 pub DIRW		6 DIRX ;
@@ -2109,6 +2185,7 @@ pub C$= ( adr1 adr2 len -- flg )
 	  0<>
 	;
 
+--- update file entry time stamps
 : CREATED ;
 : MODIFIED ;
 
@@ -2130,7 +2207,7 @@ pub AS8.3 ( nstr -- )
 12 bytes f83$
 \ find current f83 name index+1 to directory entry
 pri FIND-FILE ( str -- index+1 )
-    DUP C@ $2F = IF 1+ ROOT THEN
+    DUP C@ ` / = IF 1+ ROOT THEN
 \   convert and save in X$ for comparisons
     AS8.3 fname f83$ 11 MOVE
     0  s/c C@ 4 << 0
@@ -2199,17 +2276,22 @@ pub FSIZE! ( size -- )	mksiz ! RWC ;
 
 \ pub OPEN-FISLE$
 pub FOPEN$ ( str -- flg )
-	DUP file$ $!
-\	check mount and find 8.3 file name
-	?MOUNT FIND-FILE
-\	if found then convert directory entry to starting sector
+	file$ $! MOUNTED?
+	IF
+---	find 8.3 file name
+	file$ FIND-FILE
+---	if found then convert directory entry to starting sector
 	IF FSECTOR
 	ELSE \ if create flag set then create a preallocated size file  - else fail
 	  2 wrens SET? IF mksiz @ file$ FCREATE$ FSECTOR  ELSE 0 THEN
 	THEN
-\	open the sector although 0 = fail (mbr sector 0 is protected anyway)
-	OPEN-SECTOR  @FILE DUP opensect !
+---	open the sector although 0 = fail (mbr sector 0 is protected anyway)
+	OPEN-SECTOR  @FILE
+	ELSE 0
+	THEN
+	DUP opensect !
 	;
+
 
 pub REOPEN-FILE		file$ FOPEN$ ;
 
@@ -2230,12 +2312,21 @@ pub FPUT ( ch -- )	_fwrite @ SWAP OVER SDC!  1+ FSIZE@ MOD _fwrite ! ;
 pub FLOAD-KEY?	@FILE ;
 pub FLOAD-KEY	FGET DUP 0= IF !SERKEY THEN ;
 
-pub -FLOAD --- Load current file
-	_fread ~
+pub -FLOAD ( offset -- ) --- Load current file
+	_fread !
 	['] fload-key KEY! ['] fload-key? hook-key? !
 ;
-pub FLOAD	FOPEN -FLOAD ;
+pub FLOAD	FOPEN 0 -FLOAD ;
 
+pub -FPRINT
+    FSIZE@ 0 DO
+      I SDC@ ?DUP
+      IF DUP $0D = I 1+ SDC@ $0A <> AND
+        IF DROP CRLF ELSE EMIT THEN
+      ELSE LEAVE THEN
+    LOOP
+;
+pub FPRINT	FOPEN -FPRINT ;
 
 pub CD$		@FILE CWD!  file$ cwd$ $! ;
 
@@ -2267,6 +2358,7 @@ pub FORMAT.MBR
 \	Write MBR
 	SDBUF 0 SDWR
 	;
+
 
 
 
@@ -2310,8 +2402,9 @@ byte ~scl	--- SCL PIN
 
 25 variable ~idly	--- I2C bit timing delay
 
-pub *SDA	~sda C@ ;
-pub *SCL	~scl C@ ;
+pub *SDA		~sda C@ ;
+pub *SCL		~scl C@ ;
+pub I2C? ( -- f )	*SDA *SCL OR 31 < ;
 
 pub I2CPINS ( scl sda -- ) ~sda C! ~scl C! ;
 --- setup I2C pins with internal pullups and float them
@@ -2322,7 +2415,7 @@ pub I2C.DLY		~idly H@ 0 DO LOOP ;
 \ pub I2C.CLK?		*SDA PIN@ I2C.CLK ;
 ( Patch for CCS811 clock stretching - Pete Foden )
 
-pri I2C.CLKH		I2C.DLY *SCL HIGH *SCL FLOAT BEGIN I2C.DLY *SCL PIN@ UNTIL ;
+pri I2C.CLKH		I2C.DLY *SCL HIGH *SCL FLOAT 1000 0 DO I2C.DLY *SCL PIN@ IF LEAVE THEN LOOP ;
 pri I2C.CLKL		I2C.DLY *SCL LOW I2C.DLY ;
 pub I2C.CLK? ( -- sda )	I2C.CLKH	*SDA PIN@ *SDA FLOAT 	I2C.CLKL ;
 pub I2C.CLK  		I2C.CLKH				I2C.CLKL ;
@@ -2332,6 +2425,10 @@ pub I2C.STOP		!I2C *SDA LOW I2C.CLKH *SDA FLOAT  I2C.DLY ;
 pub I2C.START		!I2C acks C~  *SCL HIGH *SCL FLOAT  I2C.DLY *SDA LOW  I2C.DLY *SCL LOW  I2C.DLY ;
 --- I2C RESTART - ensure bus is idle then restart
 pub <I2C>		*SDA PIN@ 0= IF I2C.STOP THEN I2C.START ;
+{
+
+
+}
 
 {
 ( TAQOZ METHOD )
@@ -2377,8 +2474,43 @@ pub I2CC@ ( reg -- dat )	i2cdev C@ I2CWR I2C!    i2cdev C@ I2CRD 0 I2CGET ;
 pub I2C ( dev -- )		i2cdev C! ['] I2CC@ DUP DUP DUMP! ;
 
 	( I2C DEVICE SCAN )
+{
+create i2cs
+	$A4 C, ` RV30 , $D0 C, ` DS32 ,
+	$A4 +I2C RV3028
+	$A2 +I2C PCF8563
+	$D0 +I2C DS3231
+	$DE +I2C MCP79410
+	$40 +I2C
 
-pub lsi2c	$100 0 DO I I2CRD? IF I ."  $" .B THEN 2 +LOOP ;
+}
+pub lsi2c	$100 0 DO I I2CRD? IF I2C.STOP I SPACE .BYTE THEN 2 +LOOP ;
+{
+	--- UB3 I2C WORDS ---
+
+: !UB 	!I2C ;
+--- Write cmd & data to UB3	start     write dev cmd  data stop
+pub UBCMD ( data cmd -- )	!UB I2C.START $36 I2C!  I2C! I2C! I2C.STOP ;
+
+--- Read res & data from UB3	start     read dev restart   ack cmd  nak data
+pub UBDAT ( -- hhll )		!UB <I2C> $37 I2C! 0 I2CGET >B 8 << 1 I2CGET >B OR I2C.STOP ;
+
+--- set address				split, init   select   dev      adrh adrl
+pub UBADR ( addr -- ) 		W>B !UB I2C.START $36 I2C!   I2C! I2C! 10 us ;
+pub UBRD 			I2C.START $37 I2C! I2C@ nakI2C@ 8 << OR I2C.STOP ;
+pub UBW@ ( addr -- word )	UBADR UBRD ;
+pub UB@				DUP UBW@ SWAP 2+ UBW@ 16 << OR ;
+pub UBC@ ( addr -- byte )	UBW@ >B ;
+
+pub SFR@ ( iadr -- dat )	$CB UBCMD UBDAT >B ;
+pub SFRS 			['] SFR@ DUP DUP DUMP! ;
+
+
+--- select UB3 as DUMP source
+pub UB				['] UBC@   ['] UBW@   ['] UB@ DUMP! ;
+
+}
+
 
 
 
@@ -2421,12 +2553,14 @@ pub RTC				['] RTC@ DUP DUP DUMP! ;
 
 	( *** HIGH LEVEL TIME KEEPING RTC INTERFACE *** )
 
+pri RTCSEC 	0 @RTC $A2 = IF 2+ THEN ;
+
 --- fast sequential read of first 7 time keeping registers
 pub RDRTC
 	@sec 7 ERASE
 	@RTC 0EXIT
---- start from reg 0
-	I2C.START @RTC I2CPUT ?EXIT  0 I2C!
+---                   start from reg 0           or 2 for PCF8563
+	I2C.START @RTC I2CPUT ?EXIT  RTCSEC I2C!
 	<I2C> @RTC 1+ I2C!    @sec 6 BOUNDS DO I2C@ I C! LOOP
 	nakI2C@ @year C! I2C.STOP
 	;
@@ -2436,32 +2570,46 @@ pri !RTC
 	@RTC $D0 = IF $B4 $37 RTC! 0 $10 RTC! 0 $0F RTC! THEN
 ;
 
-\ checks for different RTC chips and sets them up
-pri ?RTC
-	~rtc C~
-	@sec 7 ERASE
-	$D0 I2CRD? IF $D0 ~rtc C! EXIT THEN
-	$A4 I2CRD? IF $A4 ~rtc C! EXIT THEN
+pri TRYRTC	DUP I2CRD? IF DUP ~rtc C! R> DROP THEN DROP ;
+
+--- scans the I2C bus and returns with a possible RTC addr if I2C pins are set
+pri SCANRTC ( -- )
+--- 	        MCP79410   DS3231 etc RV3028 etc PCF8563
+	I2C? IF	$DE TRYRTC $D0 TRYRTC $A4 TRYRTC $A2 TRYRTC THEN
 ;
 
 
 pub >HMS ( s m h -- hhmmss )	100 * + 100 * + ;
+
+pub secs@			$40054024 DUP 4 + @ SWAP @ 1000000 um/mod nip ;
+\ pub ms@				cycles 1000 U/ ;
+\ pub secs@			ms@ 1000 U/ ;
+pub QTIME@			secs@ bms @ + 60 U/MOD 60 U/MOD >HMS ;
+
+--- read hardware RTC and sync software time
+pub QTIME!			HMS 60 * + 60 * + secs@ - bms ! ;
+
+
+
 pub BCDS ( bcds -- dec rem ) 	DUP >N OVER 4 >> >N 10 * + SWAP 8 >> ;
 pub BCD>DEC ( bcds -- val )	BCDS BCDS BCDS DROP >HMS ;
 
 \ RV-3028 supports UNIX time in seconds from 1970
 pub UTIME@ ( -- secs )		0 27 4 BOUNDS DO I RTC@ OR 8 >> LOOP ;
 pub UTIME! ( secs -- )		27 4 BOUNDS DO DUP I RTC! 8 >> LOOP DROP ;
-
+pri RTC3! 			3 BOUNDS DO I RTCB! LOOP ;
 \ pub TIME! ( hhmmss -- )		!RTC 100 U/MOD SWAP 0 RTCB! 100 U/MOD SWAP 1 RTCB! 2 RTCB! ;
-pub TIME! ( hhmmss -- )		!RTC HMS 2 RTCB! 1 RTCB! 0 RTCB! ;
+pub TIME! ( hhmmss -- )
+ 	RTC? IF !RTC DUP HMS SWAP ROT  RTCSEC RTC3! THEN QTIME! ;
 pub DAY!			7 AND 3 RTC! ;
-pub DATE! ( yymmdd -- )		!RTC HMS 6 RTCB! 5 RTCB! 4 RTCB! ;
+pub DATE! ( yymmdd -- )
+	RTC? IF !RTC DUP HMS SWAP ROT   RTCSEC 4 + RTC3! THEN
+	HMS @year C! @month C! @date C! ;
 
 
 
 --- read bcd fields and mask before converting to decimal
-pub TIME@			RDRTC @sec U@ $3F7F7F AND BCD>DEC ;
+pub TIME@			RTC? IF RDRTC @sec U@ $3F7F7F AND BCD>DEC ELSE QTIME@ THEN ;
 pub DATE@			RDRTC @date U@ $FF1F3F AND BCD>DEC ;
 pub DAY@			@day C@ 7 AND 1 MAX ;
 
@@ -2473,14 +2621,14 @@ pub .DAY			DAY@ 1- 3 * s" MONTUEWEDTHUFRISATSUN" DROP + 3 TYPE ;
 pub .TIME			TIME@ $3A .HMS ;
 pub .FDT			.DATE SPACE .DAY SPACE .TIME ;
 
-pub ms@				cycles 1000 U/ ;
-pub secs@			ms@ 1000 U/ ;
-pub QTIME@			secs@ bms @ + 60 U/MOD 60 U/MOD >HMS ;
-
---- read hardware RTC and sync software time
-pub QTIME!			HMS 60 * + 60 * + secs@ - bms ! ;
 pub !QTIME			TIME@ QTIME! ;
 \
+
+\ checks for different RTC chips and sets them up
+pri ?RTC
+--- 	init vars    scan    found?  then synch
+	~rtc 8 ERASE SCANRTC ~rtc C@ IF !QTIME THEN
+;
 
 ' .FDT ^ T CTRL!
 
@@ -2507,6 +2655,12 @@ pub TIMEOUT? ( timer -- flg )	2@ SWAP cycles - ABS < ;
 
 
 pri UQUERY			yellow pen bold query plain ;
+
+
+
+
+: C2F 	compiletoflash ;
+: C2R	compiletoram ;
 
 
 
@@ -2564,7 +2718,7 @@ pub MAKERPI
 	18 NEOPIN $200000 NEO!
 	%101 S" MAKER PI RP2040" PCB! ( b0 = Pico )
 	.PCB CRLF !PICO BEEP
-	3 2 I2CPINS ?RTC ~rtc C@ IF !QTIME CRLF .FDT THEN
+	3 2 I2CPINS ?RTC ~rtc C@ IF CRLF .FDT THEN
 	PLAIN
 ;
 
@@ -2600,17 +2754,48 @@ pub MAKERPI
 }
 
 pub MAKERPICO
-	100 ms !TACHYON
+	100 ms !TACHYON   \ 13 PU 14 PU
 	$0F0C0B0A SDPINS ( &15.12.11.10 )
+	$5A 13 PAD! $5A 14 PAD! 13 PU 14 PU
 	18 spkr C!
 	28 NEOPIN $200000 NEO!
 	%11 S" MAKER PI PICO" PCB! ( b0 = Pico )
 	.PCB
 	CRLF !PICO BEEP
 	3 2 I2CPINS ?RTC ~rtc C@ IF !QTIME CRLF .FDT THEN
-	SD? IF cyan pen CRLF PRINT" MOUNTING " MOUNT THEN
+	KEY? IF KEY $1B = IF PLAIN EXIT THEN THEN
+	.MOUNT
 	PLAIN
 ;
+
+\ Usage:  c2f : init makerpico ; c2r save
+
+: PBJ
+	MAKERPICO
+	SD? NOT IF $0A0D0B0C SDPINS .MOUNT THEN
+;
+
+pub PICOVGA --- pimoroni PICO VGA DEMO
+	100 ms !TACHYON   \ 13 PU 14 PU
+\	IP# 22.19.18.05 SDPINS
+	$16131205 SDPINS
+\	$5A 13 PAD! $5A 14 PAD! 13 PU 14 PU
+	28 spkr C! ( 27 RIGHT  )
+\	28 NEOPIN $200000 NEO!
+	%11 S" PIMORONI PICO VGA" PCB! ( b0 = Pico )
+	.PCB
+	CRLF !PICO BEEP
+	0 0 I2CPINS
+\	3 2 I2CPINS ?RTC ~rtc C@ IF !QTIME CRLF .FDT THEN
+	KEY? IF KEY $1B = IF PLAIN EXIT THEN THEN
+	.MOUNT
+	PLAIN
+;
+
+
+
+
+\ IP# 2.5.3.4 SDPINS
 
 --- divert console to the ESP01 on 16 and 17
 pub ESPCON	0 0 FNC  1 0 FNC  16 #UART 17 #UART  ( UART0 115200 BAUD ) ;
@@ -2703,6 +2888,13 @@ ascii-xfr -sn -l 5 Forth/FL.FTH > /dev/ttyUSB$2
 ascii-xfr -sn Forth/$1.FTH > /dev/ttyUSB$2
 
 CHANGELOG:
+
+220528	Add in checks for SD card and mounting for file ops
+	Added MLOAD - fast load can use this but so can FRED
+220522	Problem with MAKERPICO microSD setup - allowing for external adaptor as well
+	Add tests for PCF8563 (still needs to be tested)
+220518	Allow $! to handle counted strings automatically (facilitates s" use with FOPEN$)
+	org now compensates orgs in DATA range (during reloads org variables are used to reset org)
 220503	Modify ` to handle up to 4 characters  ` PUB .L --- 00505542
 	Add extended bit operations setb clrb togb bit?
 220501	Change CR to CR only - make CRLF standard
