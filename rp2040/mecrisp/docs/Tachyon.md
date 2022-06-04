@@ -15,7 +15,7 @@ pub  | pre   | | public colon definition (normal)
 pri  | pre   | | private colon definition (can be hidden later)
 ---  | pre   | | use as a clear separator and comment
 }    | pre   | | do nothing, terminator for block comments
-BOUNDS | pub | ( n1 n2 — n3 n1 ) | n3 ← n1 + n2
+BOUNDS | pub | ( s-addr len — e-addr s-addr ) | e-addr ← s-addr + len: setup an end address by adding a length to the start address
 \>\> | pub   | ( n1 u — n2 ) | n2 ← n1 / 2^u, logical shift *n1* to the right by *u* bit-places, zero filling at the left
 <<   | pub   | ( n1 u — n2 ) | n2 ← n1 * 2^u, logical shift *n1* to the left by *u* bit-places, zero filling at the right
 LIT  | pri   | ( x — ) ( — x ) | compile or stack a literal value *x*
@@ -192,3 +192,74 @@ PEN!  | pub   | ( col — ) | set and store the foreground colour
 PEN   | pub   | ( col — ) | if different, set and store the foreground colour
 PAPER! | pub  | ( col — ) | set and store the background colour
 PAPER | pub   | ( col — ) | if different, set and store the background colour
+.PAR  | pri   | ( u c — ) | output *u* as a decimal value followed by the character *c*
+CUR   | pri   | ( c n — ) | output the first half of a cursor positioning command with *n* as the parameter and *c* as the separator
+XY    | pub   | ( x y — ) | move the output cursor to co-ordinate (x,y): top left = (1,1)
+ERSCR | pub   | ( — ) | erase the screen, leaving the cursor where it is
+ERLINE | pub  | ( — ) | erase the current line, leaving the cursor where it is
+CLS   | pub   | ( — ) | erase the screen and move the cursor back to the top left
+asw   | pri   | ( f — ) | if *f* is true output 'h' otherwise output 'l'
+CURSOR | pub  | ( on/off — ) | switch the cursor on or off according to the passed parameter
+ATR   | pri   | ( c — ) | output an ANSI 'select graphic rendition' attribute type *c*
+PLAIN | pub   | ( — ) | resets pen and paper to defaults and clears all attributes
+REVERSE | pub | ( — ) | swaps foreground and background colours
+BOLD  | pub   | ( — ) | embolden the output text; different font or more intense colour may be employed
+UL    | pub   | ( — ) | underline the output text
+BLINK | pub   | ( — ) | cause output text to blink
+WRAP  | pub   | ( on/off — ) | switch word wrap on or off if it is supported by the terminal
+UTF8  | pub   | ( code — ) | output a UTF8 character *code*
+EMOJI | pub   | ( ch — ) | output an emoji character *ch*
+.HEX  | pub   | ( d len — ) | output the unsigned double *d* in hex with *len* digits
+.B    | pub   | ( b — ) | output the byte *b* as two hex digits
+.H    | pub   | ( u — ) | output the integer *u* as four hex digits
+.L    | pub   | ( l — ) | output the long *l* as 8 hex digits
+.BINX | pub   | ( u len — ) | output the value *u* in binary with *len* digits (grouped in fours with underscores)
+.BIN  | pub   | ( u — ) | output the value *u* as 32 binary digits
+.BIN8 | pub   | ( b — ) | output the value *b* as 8 binary digits
+.BYTE | pub   | ( c — ) | output the character *c* as a dollar symbol followed by two hex digits
+~z    | var   | | variable holding the leading character for decimal number output
+D.R   | pub   | ( d len — ) | output unsigned double *d*, right justified in a field of *len* places: leading character reset to space on return
+U.R   | pub   | ( u len — ) | output unsigned value *u*, right justified in a field of *len* places: leading character reset to space on return
+Z     | pub   | ( — ) | use leading zeros for the next print
+D.DEC | pub   | ( l — ) | output unsigned long *l* in a comma grouped decimal format
+.DEC  | pub   | ( u — ) | output unsigned value *u* in a comma grouped decimal format
+.DEC2 | pub   | ( u — ) | output tens and units of *u* in two decimal digits
+.DEC4 | pub   | ( u — ) | output thousands to units of *u* in four decimal digits
+~dp   | var   | | Variable **seems to track decimals?**
+D.DECS | pub  | ( d len — ) | output unsigned double *d* with comma groups in a field of *len* places
+.DECS | pub   | ( u len — ) | output unsigned value *u* with comma groups in a field of *len* places
+.DP   | pub   | ( n len dp — ) | output fixed place decimal *n* with *dp* decimal places in a field of *len* places
+~sp   | long  | | "stack global" tracks position of 'spinner'
+SPINNER | pub | ( — ) | output the 'next' spinner position: semi-graphical indicator of activity action
+.LAP  | pub   | ( — ) | print the elapsed time in microseconds
+.LAPS | pub   | ( n — ) | print the elapsed time in  nanoseconds divided by *n*
+\*END\* | pub | ( — ) | print a report of memory use during file load and a reminder to save
+AEMIT | pub   | ( c sub — ) | output a character *c* but use *sub* if a non-printing character
+~dm   | var   | | dump memory fetch word pointer: default *@*
+~dmh  | var   | | dump memory fetch half word pointer: default *H@*
+~dmc  | var   | | dump memory fetch character/byte pointer: default *C@*
+DMC@  | pub   | ( — ) | execute dump memory fetch character
+DMH@  | pub   | ( — ) | execute dump memory fetch half word
+DM@   | pub   | ( — ) | execute dump memory fetch word
+DUMP! | pub   | ( addr h-addr c-addr — ) | set dump memory operators
+MEM   | pub   | ( — ) | reset memory operators to defaults
+PRINT: | pub  | ( — ) | output a colon followed by a space
+.ADDR | pub   | ( addr — ) | output the *addr* in 8 hex digits followed by a colon and space, all on the next line
+(DUMPA) | pub | ( s-addr len — ) | output the (printable) characters from address location *s-addr* for *len* bytes
+.BYTES | pub  | ( s-addr len — ) | output the hex values of the bytes from address location *s-addr* for *len* bytes
+DUMP   | pub  | ( s-addr len — ) | output a hex and character dump from address location *s-addr* for *len* bytes
+DUMPA  | pub  | ( s-addr len — ) | output a character dump from address location *s-addr* for *len* bytes
+DUMPAW | pub  | ( s-addr len — ) | output a wide character dump from address location *s-addr* for *len* bytes
+DUMPL  | pub  | ( s-addr len — ) | output the hex values of the words from address location *s-addr* for *len* bytes
+DUMPH  | pub  | ( s-addr len — ) | output the hex values of the half words from address location *s-addr* for *len* bytes
+QD     | pub  | ( s-addr — ) | output a quick dump of $40 bytes from *s-addr*
+.S     | pub  | ( — ) | output a snapshot of the current parameter stack
+\>NFA  | pub  | ( cfa — nfa ) | return name field address *nfa* for given code field address *cfa*
+\>LFA  | pub  | ( cfa — lfa ) | return link field address *lfa* for given code field address *cfa*
+NFA'   | pub  | ( — nfa ) | return name field address *nfa* for next word on input stream
+~n     | var  | | variable used to count characters output to line
+tw     | var  | | variable defining terminal width: default = 80
+HIGHLIGHT | pub | ( lfa — lfa ) | set the pen colour depending upon the word characteristic flags
+nwords | pub  | ( max — ) | output a list of *max* words starting from the most recent: if *max* is negative, print all
+qw     | pub  | ( — ) | output a list of the 20 most recently defined words
+words  | pub  | ( — ) | output a list of all defined words
