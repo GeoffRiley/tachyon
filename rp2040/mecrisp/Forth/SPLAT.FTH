@@ -1,5 +1,6 @@
 MECRISP
-
+FORGET SPLAT
+org? org
 pub *SPLAT*        ." SPLAT - Serial Pico Logic Analyzer Terminal  220424-1320 " ;
 
 2204240000 TME?		--- check if Tachyon Mecrisp Extensions are new enough

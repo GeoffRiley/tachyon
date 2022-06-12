@@ -2,19 +2,18 @@
 
 mecrisp
 2205281900 tme?                 --- make sure TACHYON.FTH is new enough
-_ed org  FORGET *FRED*          --- reclaim code and data
+~edsect org  FORGET *FRED*      --- reclaim code and data
 
-pub *FRED*      PRINT" FORTH RAPID EMBEDDED DEVELOPMENT EDITOR 220602-1300" ;
+pub *FRED*      PRINT" FRED - Forth Rapid Embedded Development Editor 220611-0030 " ;
 
 {
 TO DO:  Limit editing to file size
-
-        Use ^F10 to load from cursor
-        add word wrap
-
-    allow for include directives for page or file - use ^G with include to go there or to a page
+    insert/delete page
+    add horizontal scroll
+    add word wrap
+    sleep mode - locks edit
     also other directives i.e. set theme, modes, etc.
-    FNC to load and execute current source word
+    add conditional compile directives #IFDEF #IF etc
 
 
 }
@@ -23,27 +22,22 @@ TO DO:  Limit editing to file size
 pri EDLOAD              PLAIN CLS  -FLOAD  QUIT ;
 
 (   !!! PATCHES !!!     )
+pub RENAME      OPEN-FILE IF ." to " fname TIB 11 ACCEPT IF SAVEDIR THEN THEN ;
+--- form feed ensures compilation listing is not overwritten by FRED
+pub #FF         40 0 DO CRLF LOOP ;
 
 
 
 
 
-
-
-(       *** CONSTANTS ***       )
+\       *** CONSTANTS ***
 DATA $D000 + constant clipboard --- 4kB clipboard holds up to 1 page
-DATA $E000 + constant pagebuf --- allocate PAGEBUF near end of RAM
+DATA $E000 + constant pagebuf --- allocate 4kB PAGEBUF near end of RAM
 16 constant maxtabs
 
-(       *** VARIABLES ***       )
-0 bytes _ed
-12 bytes edfile$        --- filename of active tab
-long ~edfile
+\       *** VARIABLES ***
+
 long ~edsect            --- starting sector of current page
-long ~tcur              --- cursor postion in file
-long ~edcols
-long ~eflgs             --- general editor temporrary flags 0=update, 1=unsaved
----
 long ~page
 long ~ey
 long ~begin             --- marks beginning of selection (default -1 = none)
@@ -51,46 +45,52 @@ long ~end               --- marks end of select
 long ~clipsz            --- size of content copied to clipboard
 long ~ew                --- width
 long ~pagesz
-long ~qt
+long ~qt                --- quick time latch
 long ~find              --- length of find string
-long ~opts              --- option flags 0=indent 1=narrow 2=line#
-long ~idle
+long ~idle              --- idle timer - used to determine auto refresh
+long ~key               --- ASCII or abbreviated CSI code
 long ~seq               --- highlight sequence
 long ~hflgs             --- highlight flags
-long ~edtab             --- current file tab active
-maxtabs 32 * bytes ~tabbuf       --- hold the context for files
-long ~ecold
+long ~ftab              --- current file tab active
+maxtabs 32 * bytes ~ftabs      --- hold the context for files
 
+long ~edcold
+
+
+
+
+
+
+
+\       *** FILE TAB VARIABLES ***
+
+pri @ftab               ~ftab C@ maxtabs MOD ;
+pri FTAB$               @ftab 5 << ~ftabs + ;
+pri ~tcur               FTAB$ 12 + ;
+pri ~theme              FTAB$ 16 + ;
+pri ~eflgs              FTAB$ 20 + ;
 
 \       *** CURSOR TRACKING ***
 pri tcur@               ~tcur @ ;
 pri tcur!               ~tcur ! ;
 pri tcur+!              tcur@ + 0 MAX tcur! ;
 pri tcur-!              NEGATE tcur+! ;
-pri ew                  128 ;
+
 --- editor print width
-pri pw                  1 ~opts BIT? IF ew ELSE 72 THEN ;
+96 variable ~pw
+pri pw                  ~pw @ ;
+pri ew                  128 ;
 pri pagesz              4096 ;
 pri @x ( -- x )         tcur@ ew // ; --- current x position
 pri LEFTLN ( -- row )   tcur@ ew 1- ANDN ;
-pri BLK! ( width blksiz -- )    ~pagesz ! ~ew C! ;
-pri HEXBLK                      16 512 BLK! ;
-pri TXTBLK                      2048 BLK! ;
+
+
 \       *** BIT FLAGS ***
 pri save?               1 ~eflgs ;
 pri ins?                2 ~eflgs ;
 pri wr?                 7 ~eflgs ;
-long ~key
-
-
-
-
-
-
-
-
-
-
+pri indent?             3 ~eflgs ;
+pri lines?              4 ~eflgs ;
 
 
 
@@ -99,7 +99,9 @@ pri PAGE#               tcur@ pagesz / ;
 pri PAGEADR             tcur@ pagesz 1- ANDN ;
 
 --- compare memory areas
-pri COMPARE? ( src dst cnt -- f )       BOUNDS DO DUP C@ I C@ <> IF DROP 0 LEAVE THEN 1+ LOOP 0<> ;
+pri COMPARE? ( src dst cnt -- f )
+    BOUNDS DO DUP C@ I C@ <> IF DROP 0 LEAVE THEN 1+ LOOP 0<> ;
+
 --- save the current page to file (only save the modified sectors)
 pri SAVEPAGE
     ~edsect @ 0EXIT  wr? BIT? 0EXIT             --- don't save if not open or write protected
@@ -124,8 +126,6 @@ pri PAGE ( offset -- ram )
     @FILE + pagesz SDRDPAGE +
 ;
 
-
-
 \       ... PAGE FORMATTING ...
 
 pri FORMAT.PAGE --- convert block to CR delimited lines and replace nulls with spaces
@@ -136,7 +136,7 @@ pri FORMAT.PAGE --- convert block to CR delimited lines and replace nulls with s
 pub WIPE.PAGE               pagebuf pagesz $20 FILL FORMAT.PAGE ;
 
 --- format the whole file as pages (blanks with CRs)
-pub FORMAT.BLK
+pub FORMAT.PAGES
     @FILE 0EXIT
 --- Write over whole file
     RW FSIZE@ 0
@@ -148,8 +148,8 @@ pub FORMAT.BLK
     +LOOP
     RO
 ;
---- confirm complete page format          CR
-pri ?FORMAT.BLK         ."  Format? " KEY $0D = IF FORMAT.BLK THEN ;
+
+
 
 
 
@@ -166,15 +166,14 @@ pri FILE?               file$ SWAP C$= ;
 pri FLASH?              s" FLASH" FILE? ;
 pri RAM?                s" RAM" FILE? ;
 pri SECTOR?             s" SECTOR" FILE? ;
-pri TABBUF ( -- a )     ~edtab C@ maxtabs MOD 5 << ~tabbuf + ;
 
 pri TEXTXY@ ( -- x y )  tcur@ 0 MAX pagesz // ew U/MOD DUP ~ey C! ;
-pri !TEXTXY             TEXTXY@ SWAP 9 + SWAP 3 + XY ;
-pri @STATUS ( n -- )    36 + 1 XY ;
+pri !TEXTXY             TEXTXY@ SWAP 9 + SWAP 4 + XY ;
+pri @STATUS ( n -- )    38 + 1 XY ;
 
 \      ... THEME ...    --- black red green yellow blue magenta cyan white
-pub edcols ( i -- c )   ~edcols @ SWAP 2 << >> >N ;
-pub THEME               4 << OR 4 << OR 4 << OR ~edcols ! ;
+pub THEME               4 << OR 4 << OR 4 << OR ~theme ! ;
+pri UseTheme            ~theme @ SWAP 2 << >> >B DUP >N PLAIN PEN 4 >> PAPER ;
 ---                     text paper info frame
 pub -C64                white blue  blue white THEME ;
 pub -MINT               blue white black green THEME ;
@@ -182,28 +181,28 @@ pub -DARK               yellow black white magenta THEME ;
 pub -DAY                white magenta black cyan  THEME ;
 pub -BRIGHT             black yellow white magenta THEME ;
 pub -MONO               white black white black THEME ;
-
-
-pri -HDRS               PLAIN 2 edcols PEN 3 edcols PAPER ;
+pub -LOGO               white cyan cyan white THEME ;
+pub -BLUE               black cyan blue white THEME ;
+pri -HDRS               2 UseTheme ;
 pri -INFO               white pen red paper ;
-pri -TEXT               PLAIN 0 edcols PEN 1 edcols PAPER ;
+pri -TEXT               0 UseTheme ;
 pri -TITLE              -HDRS bold white pen ;
+
 
 
 \       ... HEADER INFO ...
 
-pri .FILE
-    -TITLE  PRINT" EDIT: " -HDRS edfile$ PRINT$ 3 SPACES 20 1 XY   ;
-pri .RW         wr? BIT? IF -INFO ."  RW" ELSE ."  RO" THEN ;
-pri .INDENT     0 ~opts BIT? IF -INFO PRINT"  INDENT" ELSE PRINT"  undent" THEN ;
-pri .INS        -TEXT  ins? BIT? IF -INFO PRINT"  INS" ELSE PRINT"  OWR" THEN ;
-pri .CLIP       -HDRS  ." CLIP: " ~clipsz @ DUP IF -INFO THEN 4 U.R -HDRS ;
+pri .PAGE#      8 SPACES CR ." PG "  PAGE# 1+ 3 Z U.R SPACE ;
+pri .RW         wr? BIT? IF -INFO ."  EDIT" ELSE -HDRS ."  READ" THEN ;
+pri .INDENT     indent? BIT? IF -INFO PRINT"  INDENT" ELSE -HDRS PRINT"  nodent" THEN ;
+pri .INS        -TEXT  ins? BIT? IF -INFO PRINT"  INS" ELSE -HDRS PRINT"  OWR" THEN ;
+pri .CLIP       -HDRS  ."  CLIP: " ~clipsz @ DUP IF -INFO THEN 4 U.R -HDRS ;
 pri .SIZE       ." SIZE: "  ew PRINT ." x" pagesz ew / PRINT ;
 --- display the clock in the top right corner ( use quick time software clock )
-pri .CLOCK      63 1 XY QTIME@ 0 <# # # ` : HOLD # # ` : HOLD # # #> TYPE ;
+pri .CLOCK      72 1 XY QTIME@ 0 <# # # ` : HOLD # # ` : HOLD # # #> TYPE ;
 pri .TXTRULE    pw 0 DO I 7 AND 0= IF I 3 >> 1 U.R ELSE I 3 AND IF ` . ELSE ` | THEN EMIT THEN LOOP ;
-pri .HEXRULE    pw 0 DO I >N 0 1 .HEX LOOP      pw 16 = IF 16 0 DO SPACE I .BYTE LOOP THEN ;
-pri .PAGE#      8 SPACES CR ." PG "  PAGE# 1+ 3 Z U.R SPACE ;
+\ pri .HEXRULE    pw 0 DO I >N 0 1 .HEX LOOP      pw 16 = IF 16 0 DO SPACE I .BYTE LOOP THEN ;
+
 pri .RULER      -HDRS REVERSE .TXTRULE ;
 
 --- display header  - reset term - plain - clear
@@ -212,9 +211,10 @@ pri .INFO       PLAIN  -HDRS ( pw 8 + SPACES ) .RW SPACE .INDENT SPACE .INS SPAC
 
 pri .FTABS
     PLAIN ERLINE -HDRS PRINT"  FILES: "   PLAIN
-    maxtabs 0 DO PLAIN I 1 AND IF REVERSE THEN
-      I 5 << ~tabbuf + DUP @
-      IF ~edtab C@ maxtabs MOD I = IF bold red I 1 AND IF paper ELSE pen THEN THEN
+    maxtabs 0 DO PLAIN I 1 AND IF REVERSE THEN blue pen
+      I 5 << ~ftabs + DUP @
+---   if active and current focus then display in red whether normal/reverse tab
+      IF @ftab I = IF bold white I 1 AND IF paper ELSE pen THEN THEN
         SPACE DUP LEN$ 12 MIN TYPE SPACE
       ELSE DROP LEAVE THEN
     LOOP PLAIN
@@ -223,36 +223,36 @@ pri .FTABS
 
 
 \       ... TEXT SELECTION ...
-
 pri ?SELECT
     ~end @
     IF --- selection is active if ~end is non-zero
       DUP ~begin @ ~end @ WITHIN
         IF DROP REVERSE ELSE ~end @ 1+ = IF 0 -TEXT  THEN THEN
     ELSE DROP
-    THEN
-;
-
-( some trial match methods - looking for a better solution )
-
+    THEN ;
 pri hflgs? ( b -- f )       DUP ~hflgs BIT? DUP IF SWAP ~hflgs CLRB ELSE SWAP ~hflgs SETB THEN ;
-
-pri MATCH?        ( b s -- f )
+pri MATCH? ( b s -- f )
     ~seq SWAP C$=
     IF   hflgs? IF -TEXT 0 ELSE 1 THEN
     ELSE DROP 0
     THEN ;
 
+\       ... KEYBOARD INPUT ...
+pri EDINP ( str -- len )        0 @STATUS -INFO 26 SPACES 0 @STATUS -HDRS TYPE -INFO TIB 32 ACCEPT ;
 
-
-
-
-
-
-
-
-
-
+pri EDNUM ( str -- num f )      EDINP TIB SWAP NUMBER ;
+\       *** ENHANCED KEY INPUT ***
+--- return with char or long for single key or escape sequence
+pub EDKEY ( --- code )
+    KEY DUP $1B =
+    IF  cycles SWAP
+      BEGIN KEY?
+---                ignore ;      else merge to code       update timeout
+        IF KEY DUP ` ; = IF DROP ELSE SWAP 8 << OR THEN   NIP cycles SWAP THEN
+---     timeout after 3ms of inactivity - must be end of sequence
+        OVER cycles - ABS 3000 >
+      UNTIL NIP
+    THEN DUP ~key ! ;
 
 \       ... HIGHLIGHTING ...
 
@@ -295,7 +295,7 @@ pri ?HIGHLIGHT ( ch -- )
 ;
 pri .ROW# ( index -- )
 --- print line numbers or offset
-    PLAIN CR 2 ~opts BIT?
+    PLAIN CR lines? BIT?
     IF L>W .B .H
     ELSE 7 >> 2 SPACES 1+ 4 U.R
     THEN
@@ -319,53 +319,47 @@ pri .LINE               LEFTLN .ROW ;
 
 
 \       ... PAGE DISPLAY ...
-
 pri .PAGE
 --- page offset    for page size
-    PAGEADR pagesz BOUNDS
-      DO CRLF I .ROW  ew +LOOP
-;
+    PAGEADR pagesz DUP 2 >> + BOUNDS
+      DO CRLF I .ROW  ew +LOOP ;
 pri HEADER
     OFF CURSOR -HDRS HOME pw 8 + SPACES CR
-    .PAGE# SPACE .INFO 1 2 XY .FTABS
-;
+    .PAGE# SPACE .INFO 1 2 XY .FTABS ;
 pri REFRESH
-    15 EMIT HEADER .PAGE 9 35 XY .RULER
+    15 EMIT HEADER 9 3 XY .RULER .PAGE CRLF PLAIN 16 SPACES *FRED*
 --- current cursor
     !TEXTXY ON CURSOR
 --- refresh timer
-    cycles ~idle !  0 ~eflgs CLRB
-;
-
+    cycles ~idle !  0 ~eflgs CLRB ;
 --- check if block needs to be refreshed (but not if key input busy)
 pri ?REFRESH    KEY? ?EXIT   ~page @ ~edsect @ <> IF ~edsect @ ~page ! REFRESH THEN ;
-
-pri ?PAGE               tcur@ PAGE DROP ?REFRESH ;
-
+pri ?PAGE       tcur@ PAGE DROP ?REFRESH ;
 pri ?IDLE
     cycles ~idle @ - ABS 500000 >
     0 ~eflgs BIT? AND IF REFRESH THEN
-    ~qt @ QTIME@ <> IF QTIME@ ~qt ! -HDRS .CLOCK -TEXT !TEXTXY THEN
-;
+    ~qt @ QTIME@ <> IF QTIME@ ~qt ! -HDRS .CLOCK -TEXT !TEXTXY THEN ;
 pri EDDIR       PLAIN CLS HEADER  CRLF DIRW  ;
+
+\       ... CHARACTER STORE ...
+--- write a char to the page and set modified flag
+pri EDCHAR! ( ch -- )   wr? BIT? IF tcur@ ED!  3 ~eflgs SET THEN ;
+--- write new char but skip over any CR terminators
+pri EDCHAR!!            wr? BIT? IF EDCHAR! 1 tcur+! tcur@ ED@ $0D = IF 1 tcur+! THEN ELSE DROP THEN ;
+--- write character to file      forward but skip any embedded CR    then check refresh
+pri EDCHAR              DUP EMIT EDCHAR!! ?REFRESH ;
 
 
 \       ... NAVIGATION ...
-
---- go to start of next line or auto-indent
-pri EDCR
-    LEFTLN 0 ~opts BIT?
-    IF
-      BEGIN DUP ED@ $20 = WHILE 1+ REPEAT
-      DUP ED@ $0D = IF DROP LEFTLN THEN
-    THEN
-    ew + tcur! ?REFRESH
-;
 --- smart tab will jump to comments column or indent 4 spaces etc
 pri EDTAB
     @x 0= IF 4 tcur+! EXIT THEN  --- only 4 spaces from left margin
 --- if previous a char & some text between cols 8..47 then tab to 48   else standard tab       set cursor
-    tcur@ 1- ED@ $20 > tcur@ ew 1- AND 8 47 WITHIN AND IF LEFTLN 48 +  ELSE tcur@ 8 + 7 ANDN THEN tcur! ;
+    tcur@ 1- ED@ $20 > tcur@ ew 1- AND 8 47 WITHIN AND
+--- but no more text on the remainder of the line
+    0 tcur@ PAGE BEGIN DUP C@ $0D <> WHILE DUP C@ $20 > IF NIP 1 SWAP THEN 1+ REPEAT DROP 0= AND
+    IF LEFTLN 48 +  ELSE tcur@ 8 + 7 ANDN THEN tcur! ;
+
 pri GOLEFT              1 tcur-! ;
 pri GORIGHT             1 tcur+! ;
 pri LNUP                ew tcur-! ?PAGE ?REFRESH ;
@@ -382,47 +376,52 @@ pri ?HOME
     LEFTLN tcur@ = IF PAGEADR tcur! REFRESH ELSE LEFTLN tcur! THEN
 ;
 
-\       ... CHARACTER STORE ...
-
---- write a char to the page and set modified flag
-pri EDCHAR! ( ch -- )   wr? BIT? IF tcur@ ED!  3 ~eflgs SET THEN ;
---- write new char but skip over any CR terminators
-pri EDCHAR!!            wr? BIT? IF EDCHAR! 1 tcur+! tcur@ ED@ $0D = IF 1 tcur+! THEN ELSE DROP THEN ;
---- write character to file      forward but skip any embedded CR    then check refresh
-pri EDCHAR              DUP EMIT EDCHAR!! ?REFRESH ;
-pri ?INS                ins? BIT? IF tcur@ PAGE DUP 1+ ew @x - 2- MOVE THEN  ;
-\       *** EDIT ***
 pri CLRLN ( ch -- )     LEFTLN PAGE ew 1- ROT FILL .LINE save? SETB ;
-
---- Insert and Delete mode - just inserts/deletes spaces for now - might latch mode
-\ pri tINS                tcur@ PAGE DUP 1+ ew @x - 2- MOVE $20 EDCHAR! .LINE ;
-pri tINS                ins? BIT? IF ins? CLRB ELSE ins? SETB THEN REFRESH !TEXTXY ;
-pri tDEL                tcur@ PAGE DUP 1+ SWAP ew @x - 2- MOVE .LINE save? SETB ;
---- Insert a line in the page
-pri INSLN               LEFTLN PAGE DUP ew + pagebuf pagesz + OVER - MOVE $20 CLRLN REFRESH save? SETB ;
---- Delete a line in the page (need to clear last line)
-pri DELLN               LEFTLN PAGE DUP ew + SWAP   OVER pagesz 1- AND pagesz SWAP - MOVE
-                        tcur@ pagesz 1- ANDN pagesz + ew - PAGE ew 1- $20 FILL REFRESH save? SETB ;
+pri WIPELN              $20 CLRLN ;
+pri BLANKS? --- test if  line is blank
+    0 SWAP ew 1- BOUNDS DO I C@ OR LOOP $20 = ;
 
 
+\       ... INSERT/DELETE ...
 
 
+pri INS --- toggle insert/overwrite mode
+    ins? BIT? IF ins? CLRB ELSE ins? SETB THEN REFRESH !TEXTXY ;
+pri INSLN? --- Insert a line in the page
+    pagebuf pagesz + ew - BLANKS? DUP 0EXIT
+    LEFTLN PAGE DUP ew + pagebuf pagesz + OVER - MOVE WIPELN save? SETB ;
+pri INSLN               INSLN? IF REFRESH THEN ;
+pri DELLN --- Delete a line in the page
+    LEFTLN PAGE DUP ew + SWAP   OVER pagesz 1- AND pagesz SWAP - MOVE
+    tcur@ pagesz 1- ANDN pagesz + ew - PAGE ew 1- $20 FILL REFRESH save? SETB ;
+pri DELCH --- Delete a char but if the line is blank then delete the line
+    LEFTLN PAGE BLANKS? IF DELLN ELSE tcur@ PAGE DUP 1+ SWAP ew @x - 2- MOVE THEN
+   .LINE save? SETB ;
 
+pri INSCR
+--- cur - insert new line  & cur   adr   adr-of-next-line+    ( cur src dst )
+    tcur@ ew tcur+! INSLN? IF DUP PAGE DUP ew + ew 1- ANDN indent? BIT? IF 4 + THEN
+    ( s d ) DUP BEGIN 1- DUP C@ $20 > UNTIL 1+ ( s d e ) 3RD -
+    ( s d c ) 3rd 3rd 3rd  MOVE NIP $20 FILL REFRESH THEN tcur! ;
 
-
-
-
+pri EDCR --- go to start of next line or auto-indent OR insert a line if at start and insert on.
+    ins? BIT? IF LEFTLN tcur@ = IF INSLN ELSE INSCR THEN EXIT  THEN
+    LEFTLN indent? BIT?
+    IF
+      BEGIN DUP ED@ $20 = WHILE 1+ REPEAT
+      DUP ED@ $0D = IF DROP LEFTLN THEN
+    THEN
+    ew + tcur! ?REFRESH ;
 
 
 \    ... CLIPBOARD ROUTINES ...
 
-pri !CLIP               ~end ~ ~begin ~~ ; \ ~clipsz ~ ;
+pri !CLIP               ~end ~ ~begin ~~ ;
 pri !CLIPS              !CLIP ~clipsz ~ ;
 --- save selected text
 pri SAVECLIP        ~begin @ PAGE clipboard   ~end @ ~begin @ -   DUP ~clipsz ! MOVE ;
---- simply make the end of the text to indicate selection
-pri COPY
----      copy the whole page if ^B & ^C are in the same spot
+
+pri COPY --- mark the end and copy from begin -OR- copy the whole page if begin and end are same
     tcur@ ~begin @ = IF tcur@ pagesz 1- ANDN DUP ~begin ! pagesz 2- + ~end ! SAVECLIP REFRESH EXIT THEN
 --- if begin is set - select block else  just select the current line
     ~begin @ 1+
@@ -432,79 +431,80 @@ pri COPY
     ELSE
       LEFTLN DUP ~begin ! ew 1- + ~end !
     THEN
-    SAVECLIP REFRESH
-;
---- paste text marked by ^B and ending in ^C to current cursor - skip terminators
-pri PASTE
+    SAVECLIP REFRESH ;
+pri PASTE --- paste text marked by ^B and ending in ^C to current cursor - skip terminators
     ~clipsz @ ?DUP IF clipboard + clipboard ( to from )
     BEGIN DUP C@ DUP $0D = IF DROP ELSE EDCHAR!! THEN
     1+ DUP 3RD >= UNTIL 2DROP THEN
-    ~end @ 0= IF !CLIPS THEN REFRESH
-;
-pri CUT
+    ~end @ 0= IF !CLIPS THEN REFRESH ;
+pri CUT --- cut the selected block -OR- only copy if there is no begin
     ~clipsz @ 0= IF COPY THEN
     ~begin @ tcur!  ~end @ ~begin @ DO $20 EDCHAR!! LOOP
-    ~begin @ tcur!    !CLIP REFRESH
-;
+    ~begin @ tcur!    !CLIP REFRESH ;
 
 
-pri REVERT              save? CLRB edfile$ FOPEN$ DROP tcur@ pagesz + ED@ DROP PLAIN CLS REFRESH ~end ~ ;
+
+
+
+\       *** FILE OPERATIONS ***
+
+
+pri OPENTAB ( -- f )    FTAB$ DUP C@ IF FOPEN$ ELSE DROP FALSE THEN ;
+
+pri REVERT              save? CLRB OPENTAB DROP tcur@ pagesz + ED@ DROP PLAIN CLS REFRESH ~end ~ ;
 --- just revert the page for an undo for the present
 pri UNDO                REVERT ;
+--- open FRED.CFG file but create if it doesn't exist
+\ pri EDCFG              BEGIN s" FRED.CFG" FOPEN$ NOT WHILE 32 KB FSIZE! REPEAT 512 SDADR RW ;
+pri EDCFG               s" FRED.CFG" FOPEN$ DROP 512 SDADR RW ;
+
+pri LOADCFG             EDCFG ~ftabs 512 MOVE ;
+pri SAVECFG             EDCFG DUP ~ftabs 512 COMPARE? NOT IF RW ~ftabs SWAP 512 MOVE FLUSH ELSE DROP THEN  ;
+
 pub SAVEFILE
     SAVEPAGE RO MODIFIED
-    s" FRED.CFG" FOPEN$ IF RW ~tabbuf $200 SDADR $200 MOVE FLUSH THEN
-    1 @STATUS ." SAVED    "
+    SAVECFG
+    0 @STATUS PRINT" SAVED    "
+    OPENTAB DROP ;          --- RE-OPEN
 
-    edfile$ FOPEN$ DROP           --- RE-OPEN
-;
 
-\       ... KEYBOARD INPUT ...
 
-pri EDINP ( str -- len )        0 @STATUS -INFO 26 SPACES 0 @STATUS -HDRS TYPE -INFO TIB 32 ACCEPT ;
-pri EDNUM ( str -- num f )      EDINP TIB SWAP NUMBER ;
 
-\       *** ENHANCED KEY INPUT ***
---- return with char or long for single key or escape sequence
-pub EDKEY ( --- code )
-    KEY DUP $1B =
-    IF  cycles SWAP
-      BEGIN KEY?
----                ignore ;      else merge to code       update timeout
-        IF KEY DUP ` ; = IF DROP ELSE SWAP 8 << OR THEN   NIP cycles SWAP THEN
----     timeout after 3ms of inactivity - must be end of sequence
-        OVER cycles - ABS 3000 >
-      UNTIL NIP
-    THEN DUP ~key ! ;
+
+
+
+
+
+
 
 
 \       ... MULTIPLE FILE TABS ...
 
+pri TRIMTABS
+    ~ftabs maxtabs 1- 5 << BOUNDS
+    DO I @ 0= I FOPEN$ 0= OR  IF  I 32 + I 32 MOVE I 32 + 32 ERASE  THEN  32 +LOOP ;
 
-pri SAVETAB             _ed TABBUF 32 MOVE ;
-pri LOADTAB             TABBUF _ed 32 MOVE ;
-pri SHOWTAB             edfile$ FOPEN$ DROP ~page ~ ~edsect ~  ?PAGE ;
-pri NEXTTAB             SAVETAB BEGIN ~edtab ++ LOADTAB ~edfile @ UNTIL SHOWTAB ;
-pri PREVTAB             SAVETAB BEGIN ~edtab -- LOADTAB ~edfile @ UNTIL SHOWTAB ;
-pri NEWTAB              BEGIN ~edtab ++ LOADTAB ~edfile @ 0= UNTIL ;
-pri CLOSETAB            _ed 32 ERASE SAVETAB NEXTTAB ;  --- need to move others up or handle list
---- switch directly to the tab numbered 1..9
-pri TABX                ~key C@ $31 - ~edtab C! LOADTAB ~edfile @ if SHOWTAB ELSE NEXTTAB THEN ;
-
-
-
-
-pub EDOPEN
-    PLAIN CLS CRLF CRLF EDDIR    s" OPEN: " EDINP ?DUP
-    IF TIB + C~ TIB  FOPEN$
+pri SHOWTAB             OPENTAB IF ~page ~ ~edsect ~  ?PAGE THEN ;
+--- switch to next tab - save first then find the next active tab  (shouln't be necessary if trimmed)
+pri NEXTTAB             SAVEFILE BEGIN ~ftab ++ OPENTAB UNTIL SHOWTAB ;
+pri PREVTAB             SAVEFILE BEGIN ~ftab -- OPENTAB UNTIL SHOWTAB ;
+--- find the next spare tab
+pri NEWTAB              BEGIN ~ftab ++  FTAB$ @ 0= UNTIL ;
 --- save current, setup new tab with name, sector, etc
-      IF SAVETAB    NEWTAB  file$ edfile$ $!  @FILE ~edfile ! 0 tcur! -MINT ?PAGE SAVETAB  THEN
-    THEN SHOWTAB  ;
+pri ADDTAB              NEWTAB  file$ FTAB$ $!   0 tcur! -MINT ?PAGE SAVECFG ;
 
 
+pri CLOSETAB            SAVEFILE FTAB$ 32 ERASE PREVTAB TRIMTABS SAVECFG SHOWTAB ;
+pri CLOSETABS           SAVEFILE FTAB$ 512 ERASE ~ftab C~ SHOWTAB ;
+
+--- switch directly to the tab numbered 1..9
+pri TABX                ~key C@ $31 - ~ftab C! FTAB$ @ if SHOWTAB ELSE NEXTTAB THEN ;
 
 
+pri EDOPEN? ( s -- f )  EDINP DUP IF TIB + C~ TIB FOPEN$ THEN ;
+pri NEWFILE             SAVEFILE RWC s" NEW: " EDOPEN? IF FORMAT.PAGES ADDTAB SHOWTAB THEN ;
 
+pri EDOPEN              SAVEFILE EDDIR s" OPEN: " EDOPEN? IF ADDTAB THEN SHOWTAB ;
 
 
 
@@ -513,66 +513,66 @@ pub EDOPEN
 \       *** FIND & HELP etc ***
 
 pri EDHELP              s" HELP" FOPEN$ IF 0 tcur! REFRESH THEN ;
-pri EDOPTS              s" FREDOPTS" FOPEN$ IF REFRESH EDKEY REVERT THEN ;
 pri ?EDFIND
     ~find @
     IF tcur@ 1+
       BEGIN DUP PAGE C@
       WHILE DUP PAGE TIB ~find @ C$=
-         IF DUP tcur! DUP ~begin ! ~find @ + ~end !  REFRESH EXIT THEN
+         IF tcur! REFRESH EXIT THEN
         1+
       REPEAT  DROP
-   THEN
+   THEN 0 @STATUS PRINT"  NOT FOUND     "
 ;
+--- confirm complete page format with ENTER
+pri ?FORMAT.PAGES        0 @STATUS PRINT"  Format? " KEY $0D = IF FORMAT.PAGES THEN ;
 pri GOPAGE              1 MAX 1- pagesz * tcur! REFRESH ;
 pri MARKEND             0 CLRLN REFRESH ;
 pri EDPAGE              s" PAGE " EDNUM IF GOPAGE THEN ;
 pri EDFIND              s" FIND " EDINP ~find ! ?EDFIND ;
+
 pri EDESC               PLAIN CLS !CLIPS REFRESH ;
-pri EDPRINT             PLAIN CLS CRLF -FPRINT CRLF PRINT" <RETURN>" KEY DROP CLS REFRESH ;
-pri EDQUIT              FCLOSE 1 35 XY -INFO file$ PRINT$ PRINT"  CLOSED " PLAIN !SP QUIT ;
+pub EDPRINT             PLAIN CLS ` * 40 EMITS  CRLF CRLF -FPRINT CRLF PRINT" <RETURN>" KEY DROP CLS REFRESH ;
+pub EDQUIT              SAVEFILE FCLOSE SAVECFG 1 36 XY -INFO ( file$ PRINT$ ) PRINT"  CLOSED " PLAIN !SP QUIT ;
 
-pri EDBS               1 tcur-! $20 EDCHAR! .LINE ;
-pri EDNOP              REFRESH ;
-pri REVTAB             tcur@ 8 - 7 ANDN tcur! ;
-pri EDBEGIN            !CLIPS tcur@ ~begin ! ~end ~ ;
+pri EDBS                1 tcur-! $20 EDCHAR! .LINE ;
+pri EDNOP               REFRESH ;
+pri REVTAB              tcur@ 8 - 7 ANDN tcur! ;
+pri EDBEGIN             !CLIPS tcur@ ~begin ! ~end ~ ;
+pri EDEDIT              wr? SETB REFRESH ;
+
+INCLUDE IMPORT          --- ... import to page format routines ...
 
 
 
 
 
 
-\     *** PORTING UTILITY  from/to page files ***
-pri IMPORT!
-    DUP $0A $0D WITHIN
-    IF OVER $0D = OVER $0A = AND NOT IF LEFTLN ew + tcur! THEN
-     --- write the character directly to the page buffer
-    ELSE DUP pagebuf tcur@ + C! 1 tcur+! THEN
-;
-pub IMPORT ( <from> <to> -- )
-    OPEN-FILE FSIZE@ ( sect size )
-    OPEN-FILE ( sect1 size sect2 )
-    3RD OVER AND 0= IF 2DROP EXIT THEN
---- reopen source as main file - setup dest
-    ROT OPEN-SECTOR         ~edsect ! 0 tcur! MUTED
-    WIPE.PAGE   0 SWAP 0 ( prevch size 0 )
-    DO
---- get next char from source and end on null
-      FGET ?DUP
---- process a single character checking for tabs
-      IF DUP $09 =
-        IF tcur@ 7 ANDN 8 + tcur!
---- else handle CR/LF or characters
-        ELSE IMPORT!
-        THEN
---- replace prev   save one full page
-        NIP       tcur@ pagesz >= IF SAVEPAGE pagesz 9 >> ~edsect +!     WIPE.PAGE 0 tcur! THEN
-      ELSE LEAVE THEN
-    LOOP
----  insert terminator line
-    DROP LEFTLN ew + pagebuf + ew 1- 0 FILL
-    SAVEPAGE UNMUTED
-;
+
+
+
+
+
+
+
+
+{
+: COLORS        8 0 DO 8 0 DO CRLF I PEN J PAPER ." HELLO" LOOP LOOP PLAIN ;
+
+
+
+
+
+
+
+
+
+
+}
+
+
+
+
+
 
 \ ****************************************************
 \               *** KEY COMMANDS ***
@@ -588,8 +588,8 @@ pri FNC5        ;
 pri FNC6        ;
 pri FNC7        ;
 pri FNC8        ;
-pri FNC9        1 ~opts TOGB PLAIN CLS REFRESH ;
-pri FNC10       SAVEFILE 0 EDLOAD ;
+pri FNC9        pw 8 + $7 ANDN ew 1+ MOD 64 MAX ~pw ! PLAIN CLS REFRESH ;
+pri FNC10       SAVEFILE SAVECFG OPENTAB DROP 0 EDLOAD ;
 pri FNC11       ;
 pri FNC12       EDDIR EDKEY DROP file$ FOPEN$ DROP REFRESH ;
 pri ^F10        0 @STATUS CRLF clipboard ~clipsz @ + C~ clipboard MLOAD QUIT ;
@@ -613,8 +613,8 @@ pri ^HOME       0 tcur! REFRESH ;
 pri ^END        ENDTEXT ;
 pri ^PGUP       PGUP PGUP PGUP PGUP ;
 pri ^PGDN       PGDN PGDN PGDN PGDN ;
-pri ^LEFT       4 tcur-! ;
-pri ^RIGHT      4 tcur+! ;
+pri ^LEFT       8 tcur-! ;
+pri ^RIGHT      8 tcur+! ;
 pri ^UP         LNUP LNUP LNUP LNUP ;
 pri ^DOWN       LNDN LNDN LNDN LNDN ;
 
@@ -645,18 +645,18 @@ CREATE CSIVECS
     $001B5B44 , ' GOLEFT ,      $001B5B43 , ' GORIGHT ,
     $001B5B41 , ' LNUP ,        $001B5B42 , ' LNDN ,
     $001B5B5A , ' REVTAB ,      $00001B0D , ' INSLN ,
-    $001B4F4D , ' DELLN ,
-    $001B5B40 , ' tINS ,        $00001B7F , ' tDEL ,
-    $00001B1B , ' EDESC ,
+    $001B4F4D , ' DELLN ,       $00001B1B , ' EDESC ,
+    $001B5B40 , ' INS ,         $00001B7F , ' DELCH ,
     --- ALT ---
     $5B313346 , ' MARKEND ,
     $5B35337E , ' PREVTAB ,     $5B36337E , ' NEXTTAB ,
     $5B313344 , ' PREVTAB ,     $5B313343 , ' NEXTTAB ,
-    $00001B31 , ' TABX ,        $00001B32 , ' TABX ,
-    $00001B33 , ' TABX ,        $00001B34 , ' TABX ,
-    $00001B35 , ' TABX ,        $00001B36 , ' TABX ,
-    $00001B37 , ' TABX ,        $00001B38 , ' TABX ,
-    $00001B39 , ' TABX ,
+    $5B33337E , ' WIPELN ,
+---     ALT 1..9 switch to FILE TAB
+    $1B31 , ' TABX , $1B32 , ' TABX , $1B33 , ' TABX , $1B34 , ' TABX ,
+    $1B35 , ' TABX , $1B36 , ' TABX , $1B37 , ' TABX , $1B38 , ' TABX ,
+    $1B39 , ' TABX ,
+
     --- CTRL ---
     $5B313548 , ' ^HOME ,       $5B313546 , ' ^END ,
     $5B35357E , ' ^PGUP ,       $5B36357E , ' ^PGDN ,
@@ -687,46 +687,46 @@ CREATE CSIVECS
     --- VT100 CODES ---
     $1B5B357E , ' PGUP ,        $1B5B367E , ' PGDN ,
     $1B5B317E , ' ?HOME ,       $001B4F46 , ' ENDKEY ,
-    $1B5B327E , ' tINS ,        $1B5B337E , ' tDEL ,
+    $1B5B327E , ' INS ,         $1B5B337E , ' DELCH ,
     $001B4F50 , ' FNC1 ,        $001B4F51 , ' FNC2 ,
     $001B4F52 , ' FNC3 ,        $001B4F53 , ' FNC4 ,
     $5B31367E , ' FNC5 ,        $5B31377E , ' FNC6 ,
     $5B31387E , ' FNC7 ,        $5B31397E , ' FNC8 ,
     $5B32307E , ' FNC9 ,        $5B32317E , ' FNC10 ,
-    $5B32347E , ' FNC12 ,
+    $5B32347E , ' FNC12 ,       $5B31317E , ' FNC1 ,
+    $1B5B347E , ' ENDKEY ,      $5B31337E , ' FNC3 ,
+
 
     0 ,     --- table terminator
 
 
 
 
-
-
 (       *** CONTROL SEQUENCE COMMANDS ***       )
 
-pri ED^Y
+pri EDCMD
     EDKEY a>A CASE
-    ` I OF 0 ~opts TOGB REFRESH                 ENDOF
-    ` L OF 2 ~opts TOGB REFRESH                 ENDOF
-\   ` H OF HEXBLK                               ENDOF
-\   ` N OF 32 TXTBLK                            ENDOF
-\   ` T OF 64 TXTBLK                            ENDOF
+    ` I OF indent? TOGB REFRESH                 ENDOF
+    ` L OF lines?  TOGB REFRESH                 ENDOF
     ` X OF MARKEND                              ENDOF   --- erase current line (nulls)
     ` Z OF WIPE.PAGE REFRESH                    ENDOF   --- wipe & format page
     ^ Q OF 0 @STATUS PLAIN QUIT                 ENDOF   --- special debug quit
-    ^ Z OF ?FORMAT.BLK                          ENDOF   --- page format the whole file
+    ^ Z OF ?FORMAT.PAGES                        ENDOF   --- page format the whole file
+
     ` 0 OF -MONO REFRESH                        ENDOF
     ` 1 OF -MINT REFRESH                        ENDOF
     ` 2 OF -DARK REFRESH                        ENDOF
     ` 3 OF -DAY REFRESH                         ENDOF
     ` 4 OF -BRIGHT REFRESH                      ENDOF
     ` 5 OF -C64 REFRESH                         ENDOF
+    ` 6 OF -LOGO REFRESH                        ENDOF
+    ` 7 OF -BLUE REFRESH                        ENDOF
     ` W OF wr? TOGB REFRESH                     ENDOF   --- toggle read/write & read-only mode
+
     $0D OF FORMAT.PAGE REFRESH                  ENDOF
-    $20 OF $20 CLRLN                            ENDOF   --- blank current line (spaces)
+    $20 OF WIPELN                               ENDOF   --- blank current line (spaces)
     ENDCASE
 ;
-
 
 
 
@@ -739,28 +739,28 @@ pri ED^Y
 CREATE EDCTLS
         ' EDNOP ,
         ' GOLEFT  ,     ' EDBEGIN ,     ' COPY ,        ' GORIGHT ,     --- A B C D
-        ' EDNOP ,       ' EDFIND ,      ' EDPAGE ,      ' EDBS ,        --- E F G H
+        ' EDEDIT ,      ' EDFIND ,      ' EDPAGE ,      ' EDBS ,        --- E F G H
         ' EDTAB ,       ' EDNOP ,       ' EDNOP ,       ' PGDN ,        --- I J K L
-        ' EDCR ,        ' HEXBLK ,      ' EDOPEN ,      ' EDPRINT ,     --- M N O P
+        ' EDCR ,        ' NEWFILE ,     ' EDOPEN ,      ' EDPRINT ,     --- M N O P
         ' EDQUIT ,      ' REVERT ,      ' SAVEFILE ,    ' EDNOP ,       --- Q R S T
         ' EDNOP ,       ' PASTE ,       ' CLOSETAB ,    ' CUT ,         --- U V W X
-        ' ED^Y ,        ' UNDO ,        ' EDESC ,       ' EDNOP ,       --- Y Z [ \
+        ' EDCMD ,       ' UNDO ,        ' EDESC ,       ' EDNOP ,       --- Y Z [ \
         ' EDNOP ,       ' EDNOP ,       ' EDNOP ,                       --- ] ^ _
-\ E J L T U \ ] ^ _
+\ J T U \ ] ^ _
 
+--- scan CSI vectors for matching key sequence code and execute - othewwise ignore
+pri EDCSI       CSIVECS BEGIN DUP @ WHILE OVER OVER @ = IF NIP 4 + @ EXECUTE EXIT THEN 8 + REPEAT ;
 
-pub EDSEQ  CSIVECS BEGIN DUP @ WHILE OVER OVER @ = IF NIP 4 + @ EXECUTE EXIT THEN 8 + REPEAT ;
-
+pri ?INS        ins? BIT? IF tcur@ PAGE DUP 1+ ew @x - 2- MOVE THEN  ;
+--- process key input into: controls - characters - CSI escape keys
 pri EDKEY:
+--- process control keys via EDCTLS table
     DUP $20 < IF 2 << EDCTLS + @ EXECUTE EXIT THEN
-    DUP $7F = IF DROP tDEL EXIT THEN
-    DUP 8 >> IF DUP 1 35 XY .L !TEXTXY EDSEQ ELSE ?INS EDCHAR THEN
+--- in case an ASCII DEL key is received (normally it's a CSI seq)
+    DUP $7F = IF DROP DELCH EXIT THEN
+--- if key > $FF then display the seq & process else insert/write char
+    DUP 8 >> IF DUP 1 35 XY .L !TEXTXY EDCSI   ELSE ?INS EDCHAR  THEN
 ;
-
-
-
-
-
 
 
 
@@ -769,15 +769,15 @@ pri EDKEY:
 (       ... MAIN EDITOR TASK ...        )
 
 
-
+--- main task loop handles keyboard input and idle time checks
 pri EDTASK ( <addr>  -- )
-    tcur! file$ edfile$ $! @FILE ~edfile !
-    CLS ( 15 @STATUS *FRED* ) REFRESH
-    cycles ~idle ! ~edtab C~ SAVETAB
+    tcur! file$ FTAB$ $!
+    CLS REFRESH
+    cycles ~idle ! ~ftab C~ SHOWTAB
     BEGIN
       !SP   KEY?
         IF cycles ~idle !   -TEXT EDKEY EDKEY: !TEXTXY
-        ELSE ?IDLE
+        ELSE ?IDLE POLLS
         THEN
     AGAIN
 ;
@@ -785,16 +785,16 @@ pri EDTASK ( <addr>  -- )
 (       *** INIT EDIT ***      )
 pri !ED
     SD? 0= IF ."  No SD CARD! " QUIT THEN
-    ~ecold @ $A55A <>
+    ~edcold @ $A55A <>
     IF
-    _ed ~ecold OVER - ERASE
-    -MINT 128 4096 BLK!
-    ~edsect ~~
-    $A55A ~ecold !
+      ~edsect ~edcold OVER - ERASE
+      -MINT
+      ~edsect ~~
+      $A55A ~edcold !
     THEN
 ;
 
-
+0 bytes org?
 
 
 
@@ -803,23 +803,23 @@ pri !ED
 --- edit a sector (current in text mode)
 pub EDSECT        !ED OPEN-SECTOR file$ 16 ERASE s" SECTOR" file$ SWAP MOVE 0 EDTASK ;
 
---- Create a new preformatted file - default size = 1MB (else use "n FSIZE! NEWED <name>")
-pub EDNEW         !ED RWC OPEN-FILE IF FORMAT.BLK 0 EDTASK THEN ;
+--- Create a new preformatted file - default size = 1MB (else use "n FSIZE! EDNEW <name>")
+pub EDNEW         !ED RWC OPEN-FILE IF FORMAT.PAGES 0 EDTASK THEN ;
 
 --- Edit FRED itself
-pub EDME          !ED 0 ~opts SETB s" FRED" FOPEN$ IF tcur@ EDTASK THEN ;
+pub EDME          !ED indent? SETB s" FRED" FOPEN$ IF tcur@ EDTASK THEN ;
 --- edit a file or if none specified then the last one opened
 pub ED ( ED <file> )
     SD? 0= ~sdpins @ 0=  OR IF PRINT"  Sorry - no SD card! " EXIT THEN
-    !ED GET$ DUP LEN$
-    IF SPACE FOPEN$ IF 0 ~opts SETB  0 EDTASK THEN
+    !ED LOADCFG TRIMTABS  GET$ DUP LEN$
+      IF SPACE FOPEN$ IF indent? SETB  0 EDTASK THEN
 --- try to reopen the last file at the same position
-    ELSE file$ FOPEN$ IF tcur@ EDTASK THEN
-    THEN
+      ELSE OPENTAB IF tcur@ EDTASK THEN
+      THEN
     PRINT"  Unknown file " DIRW
     ;
 
-\ End of load - 12520  code bytes and 88 data bytes used in 1,107,253us
+\ End of load - 13676  code bytes and 576 data bytes used in 1,286,265us
 *END*
-
-  CON EDME
+ #FF
+ CON ED

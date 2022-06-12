@@ -6,11 +6,12 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2205281900 constant tme
+2206081130 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
 
+--- Tachyon/Mecrisp version check
 : TME? ( stamp -- )	tme U> IF ."   Needs newer version of Tachyon " QUIT THEN  ;
 
 \ simple block comment
@@ -75,7 +76,7 @@ pub .RSTACK
 	( simple fault handler - resets rather than repeats )
 
 pub FAULT		PRINT"    !address fault! " .RSTACK  RESET ;
-pub !FAULT	['] FAULT irq-fault ! ;
+pub !FAULT		['] FAULT irq-fault ! ;
 !FAULT
 
 	( hook control )
@@ -84,8 +85,8 @@ pub QUIT!		hook-quit ! ;
 pub QUIT: 		' QUIT! QUIT ;
 
 pub EMIT!		hook-emit ! ;
-pub KEY!		hook-key ! ;
-pub !SERKEY		['] serial-key KEY! ['] serial-key? hook-key? ! ;
+pub KEYS! ( key key? -- ) ?DUP IF hook-key? ! THEN ?DUP IF hook-key ! THEN ;
+pub !SERKEY		['] serial-key ['] serial-key? KEYS! ;
 pub CONOUT		['] serial-emit EMIT! ;
 pub CON			CONOUT !SERKEY ;
 pub CON?		hook-emit @ ['] serial-emit = ;
@@ -285,7 +286,7 @@ pub TACHYON ( -- )
       prompt
       hook-key @ ['] serial-key =		\ fix console to handle controls
       IF
-        ['] QKEY KEY!				\ Use control key manager
+        ['] QKEY 0 KEYS!			\ Use control key manager
         ~query @ execute respond		\ get input and --- separate from response
         !SERKEY					\ switch back to standard key input
       ELSE
@@ -515,10 +516,11 @@ pub PAPER! ( col -- )		dup ~paper ! ` 4 COL ;
 pub PAPER ( col -- )		DUP ~paper C@ <> IF PAPER! ELSE DROP THEN ;
 
 
-pri .PAR			SWAP 0 <# #S #> TYPE EMIT ;
+pri .PAR ( n ch -- )		SWAP 0 <# #S #> TYPE EMIT ;
 pri CUR ( cmd n -- )	    	ESC[ SWAP .PAR ;
 pub XY ( x y -- )		` ; SWAP CUR ` H .PAR ;
 
+\ : .PX  ESC[ ." 38;5;" ` m .PAR ;
 
 --- Erase the screen from the current location
 pub ERSCN			` 2 CSI ` J EMIT ;
@@ -1872,6 +1874,16 @@ pub FCLOSE		?FLUSH RO MBR readsect ~~ ;
 
 pub FSIZE@	fsize @ ;
 
+		( *** FILE STACKS *** )
+
+--- fstack to allow for nesting includes in a FLOAD
+16 longs fstack		--- fname(12) fread(4)
+pri !FPOP
+    fstack 64 ERASE
+;
+
+
+
 
 		( *** CLUSTERS *** )
 
@@ -2001,6 +2013,7 @@ pub !MOUNT
 	ROOT
 	serial U@ mntd !
 	1 MB mksiz !
+	!FPOP
 	;
 
 pub MOUNT
@@ -2276,8 +2289,8 @@ pub FSIZE! ( size -- )	mksiz ! RWC ;
 
 \ pub OPEN-FISLE$
 pub FOPEN$ ( str -- flg )
-	file$ $! MOUNTED?
-	IF
+    DUP C@ IF file$ $! MOUNTED?
+      IF
 ---	find 8.3 file name
 	file$ FIND-FILE
 ---	if found then convert directory entry to starting sector
@@ -2289,12 +2302,17 @@ pub FOPEN$ ( str -- flg )
 	OPEN-SECTOR  @FILE
 	ELSE 0
 	THEN
-	DUP opensect !
-	;
+    THEN
+    DUP opensect !
+;
 
 
-pub REOPEN-FILE		file$ FOPEN$ ;
+\ pub REOPEN-FILE				file$ FOPEN$ ;
 
+
+
+pub FGET ( -- ch )	_fread @ SDC@ _fread ++ ;
+pub FPUT ( ch -- )	_fwrite @ SWAP OVER SDC!  1+ FSIZE@ MOD _fwrite ! ;
 
 \ Get the file name and try to open it, return with sector
 pri OPEN-FILE ( <name> -- filesect )	GET$ SPACE FOPEN$ ;
@@ -2306,17 +2324,32 @@ pub FOPEN ( <name> -- )
 	ELSE PRINT" - File not found! " THEN
 	;
 
-pub FGET ( -- ch )	_fread @ SDC@ _fread ++ ;
-pub FPUT ( ch -- )	_fwrite @ SWAP OVER SDC!  1+ FSIZE@ MOD _fwrite ! ;
 
-pub FLOAD-KEY?	@FILE ;
-pub FLOAD-KEY	FGET DUP 0= IF !SERKEY THEN ;
 
-pub -FLOAD ( offset -- ) --- Load current file
-	_fread !
-	['] fload-key KEY! ['] fload-key? hook-key? !
-;
-pub FLOAD	FOPEN 0 -FLOAD ;
+pri FPUSH
+    fstack DUP 16 + 48 MOVE
+    fstack 16 ERASE
+    file$ fstack $!  _fread @ fstack 12 + ! ;
+pri FPOP?
+    fstack C@ DUP 0EXIT
+    fstack FOPEN$   fstack 12 + @ _fread !
+    fstack 16 + fstack 48 MOVE
+    fstack 48 + 16 ERASE ;
+
+
+
+pub FKEY			FGET DUP 0= IF FPOP? 0= IF !SERKEY THEN THEN ;
+pub FKEY? 			@FILE DUP 0EXIT DROP FSIZE@ >= _fread @ ;
+
+( offset -- ) --- Load current file
+pub -FLOAD ( addr -- )		_fread ! ['] FKEY  ['] FKEY?  KEYS! ;
+
+pub FLOAD			!FPOP FOPEN 0 -FLOAD ;
+
+pub INCLUDE ( <name> -- ) 	FPUSH FOPEN 0 -FLOAD ;
+
+
+
 
 pub -FPRINT
     FSIZE@ 0 DO
@@ -2658,7 +2691,7 @@ pri UQUERY			yellow pen bold query plain ;
 
 
 
-
+--- quick to type shortcuts
 : C2F 	compiletoflash ;
 : C2R	compiletoram ;
 
