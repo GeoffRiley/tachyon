@@ -273,6 +273,8 @@ a>A  | pub   | ( c1 — c2 ) | convert lowercase (*c1*) to upcase (*c2*)
 
 - ANSI
 
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~pen | var   | | colour of foreground printing (default = 7; white)
 ~paper | var | | colour of background surface (default = 0; black)
 PEN@ | pub   | ( — c ) | fetch the current pen colour
@@ -367,6 +369,7 @@ word | type  | stack | comment
 ~dmc  | var   | | dump memory fetch character/byte pointer: default *C@*
 
 - Dump memory operations
+
 word | type  | stack | comment
 ---  | :---: | :---: | ---
 DMC@  | pub   | ( — ) | execute dump memory fetch character
@@ -404,3 +407,19 @@ HIGHLIGHT | pub | ( lfa — lfa ) | set the pen colour depending upon the word c
 nwords | pub  | ( max — ) | output a list of *max* words starting from the most recent: if *max* is negative, print all
 qw     | pub  | ( — ) | output a list of the 20 most recently defined words
 words  | pub  | ( — ) | output a list of all defined words
+
+- Enhances SEE to display header
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+.HEAD | pub  | | 
+SEE  | pub   | ( — ) | display the implementation of the next word in the input stream
+DASM | pub   | ( c-addr — ) | disassemble code starting at *c-addr*
+@code | const | | constant pointer to the code base
+@words | const | | constant pointer to the dictionary base
+FORGET | pub | ( — ) | remove all words from the dictionary starting at the next word in the input stream
+clkfreq | const | | constant representing the system clock frequency (125MHz)
+clksysdiv | const | | constant pointer to the clock system divider
+clk!  | pub  | ( n — ) | *[clksysdiv]* ← *n* << 8 initialise the clock divider to *n*
+xosc  | const | | constant pointer to the crystal oscillator?
+pllsys | const | | constant pointer to the phase locked loop system?
