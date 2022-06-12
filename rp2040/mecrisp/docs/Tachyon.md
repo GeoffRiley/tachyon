@@ -10,6 +10,11 @@ tme  | const | | date of extension, YYMMDDhhmm
 \*TACHYON\* | func | | print extensions introduction message
 TME? | func  | ( stamp — ) | compare required *stamp* with *tme* and fails if current version is too old
 {    | func  | | ignore all until the next *}*: braces form comment blocks
+
+- Basic Tachyon compatible extensions
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 pre  | func  | | pre-emptive colon definition (an immediate)
 pub  | pre   | | public colon definition (normal)
 pri  | pre   | | private colon definition (can be hidden later)
@@ -25,16 +30,36 @@ ASCLIT | pri | ( mask — ) | compile or stack a literal string from the input b
 IP#  | pre   | | Parse ip4 address eg *IP# 192.168.0.101* → $C0A80005
 CR   | pub   | | redefine as a single carriage return without line feed
 CRLF | pub   | | emit a carriage return and line feed
+
+- Clear type words
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 PRINT | pub  | ( n — ) | print a single number; wrapper for standard *.* word
 PRINT" | pre | | compile a string and print it when executed; wrapper for standard *."* word
+
+- Creating a vector table
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 VECTORS | pub | ( cnt — ) ( index — adr ) | create a vector table, at compile time create *cnt* vectors; execution return the *adr* of the vector number *index*
 .RSTACK | pub | | print out the contents of the return stack in hex
+
+- Simple fault handler
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 FAULT | pub  | | simple fault handler, resets the system rather than taking any remedial actions
 !FAULT | pub | | word to install *FAULT* in the *irq-fault* vector
+
+- Hook control
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 QUIT! | pub  | ( f — ) | install function *f* in the *hook-quit* vector
 QUIT: | pub  | | defining word for new quit functions
 EMIT! | pub  | ( f — ) | install function *f* in the *hook-emit* vector
-KEY! | pub   | ( f — ) | install function *f* in the *hook-key* vector
+KEYS! | pub   | ( key key? — ) | install function *key* in the *hook-key* vector; and *key?* in the *hook-key?* vector
 !SERKEY | pub | | set *hook-key* to *serial-key* and *hook-key?* to *serial-key?*: redirect stdin to the serial input
 CONOUT | pub | | set *hook_emit* to *serial-emit*: redirect stdout to the serial output
 CON  | pub   | | redirect stdin and stdout to the serial interface
@@ -46,11 +71,26 @@ UNMUTED | pub | | restore *hook_emit* from *save-emit*
 MKEY? | pri  | ( — addr ) | return the multi-key entry buffer pointer
 MKEY | pri   | ( key — ) | look for new multi-key entries and increment *~mkey* or reset to using straight serial key routines
 MLOAD | pri  | ( addr — ) | initialise *~mkey* and direct import stream through the multi-key routines
+
+- Initialise stack pointer
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 !SP  | pub   | | init stack pointer: move the SP back to the top of the stack space
+
+- Timing tools
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~laps | var  | | array of two cells used by the timing tools (assuming a cell is 4 bytes)
 LAP  | pub   | | move *~laps[0]* → *~laps[1]*; then *cycles* → *~laps[0]*
 LAP@ | pub   | | return the time difference (in ms) between the last two calls to LAP
 ~p   | var   | | variable holding saved copy of thread end
+
+- Terminal source code loader mode
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ?REPORT | pub | | checks if the thread end position is inconsistent; if so it prints an error message
 EMITS | pub  | ( c u — ) | emit *u* consecutive copies of the character *c*
 EMITD | pub  | ( u — ) | lim. 0 <= *u* <= 9: convert *u* into the ascii equivalent digit and emit it
@@ -61,6 +101,11 @@ INDENT | pub | ( u — ) | emit a carriage return followed by *u* tabs
 ~m   | var   | | variable: dictionary position
 ~o   | var   | | variable: data space tracker pointer
 mecrisp | pub | | initialise *~m*, *~o*, stack and *~laps*
+
+- Console Control Keys
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ctrls | VECTORS | | an array of 32 vectors corresponding to the 32 control keys; initialised to zeros
 CTRL! | pub  | ( cfa n — ) | *ctrls[n]* ← *cfa*: save the function address in the *n*th vector
 ~k   | var   | | variable for last command entry
@@ -69,6 +114,11 @@ DISCARD | pri | | discard and reset the CLI **NOT SURE HOW THIS WORKS**
 |    | key   | ^C | perform *RESET*
 |    | key   | ^X | perform *REX*
 |    | key   | esc | perform *DISCARD*
+
+- Background polling whilst waiting for input
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~polls | buffer: | | 16 byte background polling buffer (4 cells)
 !POLLS | pub | | initialise the *~polls* buffer to all zeros
 @POLL | pub  | ( n — addr ) | return the address of the *n*th element of the *~polls* buffer
@@ -86,8 +136,17 @@ COMPEX | pub | | *place saver*
 ~query | var | | pointer to cfa of *query*
 prompt | pub | | print the CLI prompt
 respond | pub | | print the execution operating response
+
+- User Prompt
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 TACHYON | pub | | main Tachyon user prompt: defined as the system quit function
-|    |      | |
+
+- Data space variables — uninitialised
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 DATA | const | | ← $20030000: base for all data and buffers
 org  | pub   | ( n — ) | *org* ← *n*: update data space pointer with the given value
 org@ | pub   | ( — addr ) | return the address pointed to by the data space pointer
@@ -99,6 +158,11 @@ alorg | pub  | ( n — ) | align *@org* on a boundary appropriate to the given v
 (longs) | pri | ( n — ) | reserve space in the data space for *n* 32 bit long values
 longs | pre  | ( n — ) | pre-emptive version of *(longs)*
 long | pre   | ( — ) | allocate space for a single 32 bit long value
+
+- Tachyon like utility words
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 shift | pub  | ( n — ) | perform *<<* or *>>* automatically for *n* places depending upon the sign: negative shit right, positive shift left
 \>\| | pub   | ( mask — bit ) | return the bit number of the rightmost bit within the provided mask
 \|<  | pub   | ( bit — mask ) | return a mask with bit number *bit* set
@@ -130,6 +194,11 @@ LIMIT | pub  | ( n min max — n ) | constrain *n* to *min* and *max*
 U/   | pub   | ( u1 u2 — u3 ) | *u3* ← floor(*u1* / *u2*)
 //   | pub   | ( u1 u2 — u3 ) | *u3* ← remainder(*u1* / *u2*)
 HMS  | pub   | ( #hhmmss — ss mm hh ) | divide hours, minutes and seconds from single value
+
+- Unit multipliers
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 KB   | pub   | ( u — u*1024 ) | convert *u* in kibibytes to bytes (1 KiB = 2^10 bytes—IEC unit)
 MB   | pub   | ( u — u*1024*1024 ) | convert *u* in mebibytes to bytes (1 MiB = 2^20 bytes—IEC unit)
 M    | pub   | ( u — u*1000000 ) | convert *u* in megabytes to bytes (1 MB = 10^6 bytes—SI unit)
@@ -137,11 +206,26 @@ s    | pub   | ( u — ) | delay *u* seconds
 ON   | const | | ← 1
 OFF  | const | | ← 0
 1K   | const | | ← 1000
+
+- Simple conditional EXIT words
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 0EXIT | pub  | ( n — ) | if *n* == 0 remove the top element from the return stack: return from the calling word
 ?EXIT | pub  | ( f — ) | if *f* is true remove the top element from the return stack: return from the calling word
+
+- unaligned longs
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~u   | var   | | variable for unaligned longs
 U@   | pub   | ( addr — long ) | given the *addr* of an unaligned long, fetch the value
 U!   | pub   | ( long addr — ) | given the *addr* of an unaligned long, store the long at that location
+
+- Stack globals
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~a   | long  | | "stack global"
 ant! | pub   | ( n — ) | store *n* in *~a*
 ant  | pub   | ( — n ) | fetch *~a*
@@ -160,17 +244,35 @@ emu  | pub   | ( — n ) | fetch *~e*
 ~f   | long  | | "stack global"
 fox! | pub   | ( n — ) | store *n* in *~f*
 fox  | pub   | ( — n ) | fetch *~f*
+
+- Bit on byte flag operations
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 SET  | pub   | ( mask addr — ) | set the bits in *mask* on the value in *[addr]*
 CLR  | pub   | ( mask addr — ) | clear the bits in *mask* on the value in *[addr]*
 SET? | pub   | ( mask addr — f ) | test if the bits in *mask* are set in the value in *[addr]*
+
+- Bit on long flag operations
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 SETB | pub   | ( bit addr — ) | set bit number *bit* on the value in *[addr]*
 CLRB | pub   | ( bit addr — ) | clear bit number *bit* on the value in *[addr]*
 TOGB | pub   | ( bit addr — ) | toggle bit number *bit* on the value in *[addr]*
 BIT? | pub   | ( bit addr — f ) | test if bit number *bit* on the value in *[addr]* is set
+
+- Null terminated strings
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 $!   | pub   | ( src dst — ) | store nullterm or counted string as nullterm string
 LEN$ | pub   | ( str — len ) | find the length of a nullterm string
 PRINT$ | pub | ( str — ) | print nullterm string
 a>A  | pub   | ( c1 — c2 ) | convert lowercase (*c1*) to upcase (*c2*)
+
+- ANSI
+
 ~pen | var   | | colour of foreground printing (default = 7; white)
 ~paper | var | | colour of background surface (default = 0; black)
 PEN@ | pub   | ( — c ) | fetch the current pen colour
@@ -209,6 +311,11 @@ BLINK | pub   | ( — ) | cause output text to blink
 WRAP  | pub   | ( on/off — ) | switch word wrap on or off if it is supported by the terminal
 UTF8  | pub   | ( code — ) | output a UTF8 character *code*
 EMOJI | pub   | ( ch — ) | output an emoji character *ch*
+
+- Print Hex & Binary numbers
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 .HEX  | pub   | ( d len — ) | output the unsigned double *d* in hex with *len* digits
 .B    | pub   | ( b — ) | output the byte *b* as two hex digits
 .H    | pub   | ( u — ) | output the integer *u* as four hex digits
@@ -217,6 +324,11 @@ EMOJI | pub   | ( ch — ) | output an emoji character *ch*
 .BIN  | pub   | ( u — ) | output the value *u* as 32 binary digits
 .BIN8 | pub   | ( b — ) | output the value *b* as 8 binary digits
 .BYTE | pub   | ( c — ) | output the character *c* as a dollar symbol followed by two hex digits
+
+- Print decimal numbers
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~z    | var   | | variable holding the leading character for decimal number output
 D.R   | pub   | ( d len — ) | output unsigned double *d*, right justified in a field of *len* places: leading character reset to space on return
 U.R   | pub   | ( u len — ) | output unsigned value *u*, right justified in a field of *len* places: leading character reset to space on return
@@ -231,13 +343,32 @@ D.DECS | pub  | ( d len — ) | output unsigned double *d* with comma groups in 
 .DP   | pub   | ( n len dp — ) | output fixed place decimal *n* with *dp* decimal places in a field of *len* places
 ~sp   | long  | | "stack global" tracks position of 'spinner'
 SPINNER | pub | ( — ) | output the 'next' spinner position: semi-graphical indicator of activity action
+
+- Timing reporting tools
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 .LAP  | pub   | ( — ) | print the elapsed time in microseconds
 .LAPS | pub   | ( n — ) | print the elapsed time in  nanoseconds divided by *n*
 \*END\* | pub | ( — ) | print a report of memory use during file load and a reminder to save
+
+- Any address dump
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 AEMIT | pub   | ( c sub — ) | output a character *c* but use *sub* if a non-printing character
+
+- Device memory operations
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~dm   | var   | | dump memory fetch word pointer: default *@*
 ~dmh  | var   | | dump memory fetch half word pointer: default *H@*
 ~dmc  | var   | | dump memory fetch character/byte pointer: default *C@*
+
+- Dump memory operations
+word | type  | stack | comment
+---  | :---: | :---: | ---
 DMC@  | pub   | ( — ) | execute dump memory fetch character
 DMH@  | pub   | ( — ) | execute dump memory fetch half word
 DM@   | pub   | ( — ) | execute dump memory fetch word
@@ -253,10 +384,20 @@ DUMPAW | pub  | ( s-addr len — ) | output a wide character dump from address l
 DUMPL  | pub  | ( s-addr len — ) | output the hex values of the words from address location *s-addr* for *len* bytes
 DUMPH  | pub  | ( s-addr len — ) | output the hex values of the half words from address location *s-addr* for *len* bytes
 QD     | pub  | ( s-addr — ) | output a quick dump of $40 bytes from *s-addr*
+
+- Better stack listing
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 .S     | pub  | ( — ) | output a snapshot of the current parameter stack
 \>NFA  | pub  | ( cfa — nfa ) | return name field address *nfa* for given code field address *cfa*
 \>LFA  | pub  | ( cfa — lfa ) | return link field address *lfa* for given code field address *cfa*
 NFA'   | pub  | ( — nfa ) | return name field address *nfa* for next word on input stream
+
+- Simple names only dictionary listing
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~n     | var  | | variable used to count characters output to line
 tw     | var  | | variable defining terminal width: default = 80
 HIGHLIGHT | pub | ( lfa — lfa ) | set the pen colour depending upon the word characteristic flags
