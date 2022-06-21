@@ -6,7 +6,7 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2206081130 constant tme
+2206201800 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
@@ -53,6 +53,8 @@ pre IP#
 --- Tachyon standard CR is CR only whereas CRLF is CR+LF combo
 pub CR			$0D EMIT ;
 pub CRLF		CR $0A EMIT ;
+--- form feed ensures compilation listing is not overwritten by FRED
+pub #FF         80 0 DO CRLF LOOP ;
 
 	( CLEARTYPE WORDS )
 
@@ -90,6 +92,7 @@ pub !SERKEY		['] serial-key ['] serial-key? KEYS! ;
 pub CONOUT		['] serial-emit EMIT! ;
 pub CON			CONOUT !SERKEY ;
 pub CON?		hook-emit @ ['] serial-emit = ;
+pub SERIAL?		hook-key @ ['] serial-key = ;
 
 ' serial-emit variable save-emit
 --- muted output
@@ -228,12 +231,14 @@ pri CHKKEYS BEGIN CRLF EDKEY DUP .L 3 = UNTIL ;
 
 }
 
-
+--- SERIAL KEY INPUT that also POLLS when idle and execute control keys
 pub QKEY
     BEGIN serial-key? 0= WHILE POLLS REPEAT
     serial-key DUP $20 <
     IF DUP ctrls @ ?DUP IF NIP EXECUTE $0D THEN THEN
 ;
+\ ['] serial-key ['] serial-key? KEYS!
+pri !QKEY	['] QKEY ['] serial-key? KEYS! ;
 
 0 variable ~defers  ( note: just a single deferred execution vector for now)
 0 variable ~depth
@@ -286,7 +291,7 @@ pub TACHYON ( -- )
       prompt
       hook-key @ ['] serial-key =		\ fix console to handle controls
       IF
-        ['] QKEY 0 KEYS!			\ Use control key manager
+        !QKEY					\ Use control key manager
         ~query @ execute respond		\ get input and --- separate from response
         !SERKEY					\ switch back to standard key input
       ELSE
@@ -294,11 +299,12 @@ pub TACHYON ( -- )
       THEN
       current-source @ ~k !			\ remember position for ^X re-execute
       interpret					\ interpret/compile
-      defers
+      defers					\ defered actions are executed afterwards
     THEN
   again
 ;
 
+( force Mecrisp to switch to new QUIT loop that supports bulk loading etc )
 MECRISP
 QUIT: TACHYON
 
@@ -1353,40 +1359,55 @@ pub SDPINS ( csdodick -- ) ~sdpins ! SDCK bit &sdck ! ;
 \ : SPICLK	SDCK HIGH SDCK LOW ;
 
 
-: SPICLK	&sdck @ IOSET SIO! &sdck @ IOCLR SIO! ;
-
-\ : SPICLKS	0 DO &sdck @ IOSET SIO! &sdck @ IOCLR SIO! LOOP ;
-
-: SPICLKS	&sdck @ SWAP 0 DO DUP IOSET SIO! DUP IOCLR SIO! LOOP DROP ;
-
+: CLKHI			&sdck @ IOSET SIO! ;
+: CLKLO			&sdck @ IOCLR SIO! ;
+\ : SPICLK	CLKHI CLKLO ;
+: SPICLK		&sdck @ DUP IOSET SIO! movs r0 r0 IOCLR SIO! ;
+\ : SPICLKS	0 DO SPICLK LOOP ;
+\ : SPICLKS	SDCK SWAP 0 DO DUP HIGH DUP LOW LOOP DROP ;
+\ : SPICLKS	SDDI high &sdck @ SWAP 2* 0 DO DUP I 1 AND IF IOSET ELSE IOCLR THEN SIO! LOOP DROP ;
+\ : SPICLKS	&sdck @ SWAP 0 DO DUP IOSET SIO! DUP IOCLR SIO! LOOP DROP ;
+: SPICLKS		&sdck @ SWAP 0 DO DUP IOSET SIO! movs r0 r0 DUP IOCLR SIO! LOOP DROP ;
 ( aabbccdd -- bbccddaa ) --- write ms byte to SPI bus and rotate result
-: SPIWR		8 0 do ROL DUP SDDI PIN! SPICLK LOOP ;
-\ : SPIWR		8 0 do ROL DUP 1 AND IF SDDI HIGH ELSE SDDI LOW THEN SPICLK LOOP ;
+: SPIWR ( n -- n )	8 0 DO ROL DUP SDDI PIN! SPICLK LOOP ;
+
+\ : SPIWR ( n -- n )	SDDI SWAP 8 0 DO ROL OVER PIN! SPICLK LOOP NIP ;
+
+
+\ : SPIWR		8 0 DO ROL DUP SDDI PIN! SPICLK LOOP ;
+\ : SPIWR		8 0 DO ROL DUP 1 AND IF SDDI HIGH ELSE SDDI LOW THEN SPICLK LOOP ;
 ( byte -- ) --- write byte to SPI bus
-: SPIWB		24 << SPIWR DROP ;
+: SPIWB			24 << SPIWR DROP ;
 ( cmd -- ) --- format as SD command and write
-: SPIWC		$3f AND $40 OR SPIWB ;
+: SPIWC			$3F AND $40 OR SPIWB ;
 ( long -- ) --- write long to SPI
-: SPIWL		SPIWR SPIWR SPIWR SPIWR DROP ;
+: SPIWL			SPIWR SPIWR SPIWR SPIWR DROP ;
 
 \ read another byte from SPI and append to lsb of input
+{
+: SPIRD ( input -- output )
+	SDDI HIGH \ &sdck @ SWAP
+	8 0 DO 2* SDDO PIN@
+	CLKHI OR CLKLO \ SPICLK
+	LOOP 	;
+}
 : SPIRD ( input -- output )
 	SDDI HIGH &sdck @ SWAP
 	8 0 DO 2* SDDO PIN@ OR
-	OVER IOSET SIO! OVER IOCLR SIO! \ SPICLK
+	OVER IOSET SIO! movs r0 r0 OVER IOCLR SIO! \ SPICLK
 	LOOP NIP
 	;
-
-: SPIRDS ( &clk input -- &clk output )
+{
+: SPIRDS ( input -- output )
 	SDDI HIGH
-	8 0 DO 2* SDDO PIN@ OR
-	OVER IOSET SIO! OVER IOCLR SIO! \ SPICLK
+	8 0 DO 2* SDDO PIN@
+	CLKHI OR CLKLO \ SPICLK
 	LOOP
 	;
-
+}
 \ SPI read 4 byte as a 32-bit long
 : SPIRL			0 SPIRD SPIRD SPIRD SPIRD ;
-: SPIRX ( dst cnt -- )	&sdck @ ROT ROT BOUNDS DO  0 SPIRDS I C! LOOP DROP ;
+: SPIRX ( dst cnt -- )	BOUNDS DO  0 SPIRD I C! LOOP ;
 : SPITX ( src cnt -- )	BOUNDS DO I C@ SPIWB LOOP ;
 
 
@@ -1514,9 +1535,9 @@ transfer operations (refer to "SDIO Card Specification" for further details).
 
 : SDIO
     $CA SDDO PAD!
-    $53 SDCK PAD!
-    $5B SDDI PAD!
-    $63 SDCS PAD!
+    $73 SDCK PAD!
+    $7B SDDI PAD!
+    $73 SDCS PAD!
     SDCS LOW   SDCK LOW   SDDI HIGH  SDCS HIGH
 ;
 
@@ -1535,7 +1556,7 @@ transfer operations (refer to "SDIO Card Specification" for further details).
 ;
 
 : CMD ( data cmd -- res )
-    SDCS LOW
+    SDCS HIGH SDCS LOW
     DUP _sdcmd C! SDCLK
 \   write cmd and 32-bits of data
     SPIWC SPIWL
@@ -2346,13 +2367,16 @@ pub -FLOAD ( addr -- )		_fread ! ['] FKEY  ['] FKEY?  KEYS! ;
 
 pub FLOAD			!FPOP FOPEN 0 -FLOAD ;
 
-pub INCLUDE ( <name> -- ) 	FPUSH FOPEN 0 -FLOAD ;
+pub INCLUDE ( <name> -- )
+    SERIAL? IF PRINT" INCLUDE " TOKEN TYPE
+    ELSE  FPUSH FOPEN 0 -FLOAD THEN
+;
 
 
 
 
 pub -FPRINT
-    FSIZE@ 0 DO
+    CRLF FSIZE@ 0 DO
       I SDC@ ?DUP
       IF DUP $0D = I 1+ SDC@ $0A <> AND
         IF DROP CRLF ELSE EMIT THEN
@@ -2364,6 +2388,8 @@ pub FPRINT	FOPEN -FPRINT ;
 pub CD$		@FILE CWD!  file$ cwd$ $! ;
 
 pub CD		FOPEN CD$ ;
+
+pub FRENAME     OPEN-FILE IF TOKEN ?DUP IF OVER + C~ AS8.3 SAVEDIR ELSE 2DROP THEN THEN ;
 
 
 ( TRIED THIS FIRST SINCE i HAD A CARD WITH A CORRUPTED SECTOR 0 )
@@ -2458,24 +2484,6 @@ pub I2C.STOP		!I2C *SDA LOW I2C.CLKH *SDA FLOAT  I2C.DLY ;
 pub I2C.START		!I2C acks C~  *SCL HIGH *SCL FLOAT  I2C.DLY *SDA LOW  I2C.DLY *SCL LOW  I2C.DLY ;
 --- I2C RESTART - ensure bus is idle then restart
 pub <I2C>		*SDA PIN@ 0= IF I2C.STOP THEN I2C.START ;
-{
-
-
-}
-
-{
-( TAQOZ METHOD )
-I2C.CLOCK   waitx   i2cdly
-            drvh    sclpin
-            flth    sclpin      ' then float to let the pullup work'
-I2C.CNTN    waitx   i2cdly
-            testp   sclpin wc   ' wait while scl is low'
-            if_nc   jmp #I2C.CNTN
-            testp   sdapin wc   ' read SDA into wc'
-            waitx   i2cdly
-            drvl    sclpin
-    ret_    waitx   i2cdly
-}
 
 --- default I2C device address
 \ $A4 variable i2cdev
@@ -2585,17 +2593,19 @@ pub RTCB! ( bcd reg -- )	SWAP 10 U/MOD 4 << OR SWAP RTC! ;
 pub RTC				['] RTC@ DUP DUP DUMP! ;
 
 	( *** HIGH LEVEL TIME KEEPING RTC INTERFACE *** )
-
-pri RTCSEC 	0 @RTC $A2 = IF 2+ THEN ;
+pri 8563?			@RTC $A2 = ;
+pri RTCSEC 			0 8563? IF 2+ THEN ;
 
 --- fast sequential read of first 7 time keeping registers
 pub RDRTC
 	@sec 7 ERASE
 	@RTC 0EXIT
----                   start from reg 0           or 2 for PCF8563
+---                   start from reg 0  or 2 for PCF8563
 	I2C.START @RTC I2CPUT ?EXIT  RTCSEC I2C!
+---	read
 	<I2C> @RTC 1+ I2C!    @sec 6 BOUNDS DO I2C@ I C! LOOP
 	nakI2C@ @year C! I2C.STOP
+	8563? IF @day C@ @date C@ @day C! @date C! THEN
 	;
 
 \ Init RTC configs etc ( not time ) on boot
@@ -2617,7 +2627,7 @@ pub >HMS ( s m h -- hhmmss )	100 * + 100 * + ;
 pub secs@			$40054024 DUP 4 + @ SWAP @ 1000000 um/mod nip ;
 \ pub ms@				cycles 1000 U/ ;
 \ pub secs@			ms@ 1000 U/ ;
-pub QTIME@			secs@ bms @ + 60 U/MOD 60 U/MOD >HMS ;
+pub QTIME@			secs@ bms @ + 60 U/MOD 60 U/MOD 24 MOD >HMS ;
 
 --- read hardware RTC and sync software time
 pub QTIME!			HMS 60 * + 60 * + secs@ - bms ! ;
@@ -2634,13 +2644,20 @@ pri RTC3! 			3 BOUNDS DO I RTCB! LOOP ;
 \ pub TIME! ( hhmmss -- )		!RTC 100 U/MOD SWAP 0 RTCB! 100 U/MOD SWAP 1 RTCB! 2 RTCB! ;
 pub TIME! ( hhmmss -- )
  	RTC? IF !RTC DUP HMS SWAP ROT  RTCSEC RTC3! THEN QTIME! ;
-pub DAY!			7 AND 3 RTC! ;
+pub DAY!			7 AND @day C! ; \ 3 RTC! ;
 pub DATE! ( yymmdd -- )
-	RTC? IF !RTC DUP HMS SWAP ROT   RTCSEC 4 + RTC3! THEN
-	HMS @year C! @month C! @date C! ;
-
-
-
+    HMS @year C! @month C! @date C!
+    RTC? IF !RTC  @RTC $A2 =
+      IF @date C@ 5 RTCB! @month C@ 7 RTCB! @year C@ 8 RTCB! @day C@ 6 RTC!
+      ELSE @date C@ 4 RTCB! @month C@ 5 RTCB! @year C@ 6 RTCB! @day C@ 3 RTC!
+      THEN
+    THEN
+;
+{
+        0 1 2 3 4 5 6 7 8
+PCF8563 x x s m h D W M Y
+DS3231	s m h W D M Y
+}
 --- read bcd fields and mask before converting to decimal
 pub TIME@			RTC? IF RDRTC @sec U@ $3F7F7F AND BCD>DEC ELSE QTIME@ THEN ;
 pub DATE@			RDRTC @date U@ $FF1F3F AND BCD>DEC ;
@@ -2789,7 +2806,7 @@ pub MAKERPI
 pub MAKERPICO
 	100 ms !TACHYON   \ 13 PU 14 PU
 	$0F0C0B0A SDPINS ( &15.12.11.10 )
-	$5A 13 PAD! $5A 14 PAD! 13 PU 14 PU
+\	$5A 13 PAD! $5A 14 PAD! 13 PU 14 PU
 	18 spkr C!
 	28 NEOPIN $200000 NEO!
 	%11 S" MAKER PI PICO" PCB! ( b0 = Pico )
@@ -2977,7 +2994,23 @@ CHANGELOG:
 211110	Added I2C and RTC
 211024	Added polling via QKEY
 }
-
+{
++------------------------------------------------------------------------------------------------------------------------------+
+|                                                   TERMS OF USE: MIT License                                                  |
++------------------------------------------------------------------------------------------------------------------------------+
+|Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation    |
+|files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy,    |
+|modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software|
+|is furnished to do so, subject to the following conditions:                                                                   |
+|                                                                                                                              |
+|The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.|
+|                                                                                                                              |
+|THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE          |
+|WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR         |
+|COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,   |
+|ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                         |
++------------------------------------------------------------------------------------------------------------------------------+
+}
 
 
 compiletoram
