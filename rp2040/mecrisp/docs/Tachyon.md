@@ -30,6 +30,7 @@ ASCLIT | pri | ( mask — ) | compile or stack a literal string from the input b
 IP#  | pre   | | Parse ip4 address eg *IP# 192.168.0.101* → $C0A80005
 CR   | pub   | | redefine as a single carriage return without line feed
 CRLF | pub   | | emit a carriage return and line feed
+#FF  | pub   | | form feed ensures compilation listing is not overwritten by FRED (Forth Rapid Embedded Development Editor)
 
 - Clear type words
 
@@ -64,6 +65,7 @@ KEYS! | pub   | ( key key? — ) | install function *key* in the *hook-key* vect
 CONOUT | pub | | set *hook_emit* to *serial-emit*: redirect stdout to the serial output
 CON  | pub   | | redirect stdin and stdout to the serial interface
 CON? | pub   | | check if console is being sent to serial port
+SERIAL? | pub | | check is input is being taken from the serial port
 save-emit | var | | variable to save the value of *serial-emit*/*hook-emit* during muting
 MUTED | pub  | | save *hook-emit* in *save-emit*; set *hook-emit* to *DROP*
 UNMUTED | pub | | restore *hook_emit* from *save-emit*
@@ -124,7 +126,8 @@ word | type  | stack | comment
 @POLL | pub  | ( n — addr ) | return the address of the *n*th element of the *~polls* buffer
 POLLS | pub  | | execute the defined polls
 +POLL | pub  | ( cfa — ) | add a new polling routine, if there's space
-QKEY | pub   | | polling loop waiting for input from serial interface
+QKEY | pub   | | polling loop waiting for input from serial interface, also executes control keys
+!QKEY | pri  | | install *QKEY* to the *hook-key* vector and *serial-key?* to the *hook-key?* vector
 ~defers | var | | a single deferred execution vector
 ~depth | var | | depth of deferred word
 defers | pub | | execute the deferred word, if one exists: clears *~defers* before execution
