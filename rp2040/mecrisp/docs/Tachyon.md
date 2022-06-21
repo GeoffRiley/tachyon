@@ -426,3 +426,34 @@ clksysdiv | const | | constant pointer to the clock system divider
 clk!  | pub  | ( n — ) | *[clksysdiv]* ← *n* << 8 initialise the clock divider to *n*
 xosc  | const | | constant pointer to the crystal oscillator?
 pllsys | const | | constant pointer to the phase locked loop system?
+
+- I/O Words and NeoPixel
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+ROM  | const | | ← $00000000
+XIP  | const | | ← $10000000
+RAM  | const | | ← $20000000
+APB  | const | | ← $40000000
+IO0  | const | | ← $40014000
+PADS0 | const | | ← $4001c000
+RESETS | const | | ← $4000c000
+AHB  | const | | ← $50000000
+M0   | const | | ← $E0000000
+PLLSYS | const | | ← $40028000
+PLLCS | const | | ← 0
+PLLPWR | const | | ← 4
+PLLDIV | const | | ← 8
+SIO  | pub   | ( n — addr ) | convert SIO number *n* to it's appropriate *addr*
+IOIN | const | | ← $004
+IOOUT | const | | ← $010; GPIO output value
+IOSET | const | | ← $014; GPIO output value set
+IOCLR | const | | ← $018; GPIO output value clear
+IOXOR | const | | ← $01C
+IOOE | const | | ← $020; GPIO output enable
+OESET | const | | ← $024; GPIO output enable set
+OECLR | const | | ← $028; GPIO output enable clear
+OEXOR | const | | ← $02C
+GPSR  | func  | ( pin — addr ) | convert *pin* number to it's GPIO status register *addr*
+GPCR  | func  | ( pin — addr ) | convert *pin* number to it's GPIO control register *addr*
+MASK! | func  | ( flg addr mask — ) | *flg* == true: *[addr]* ← *[addr]* OR *mask*; *flg* == false: *[addr]* ← (NOT *[addr]*) AND *mask*
