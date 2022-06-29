@@ -457,3 +457,43 @@ OEXOR | const | | ← $02C
 GPSR  | func  | ( pin — addr ) | convert *pin* number to it's GPIO status register *addr*
 GPCR  | func  | ( pin — addr ) | convert *pin* number to it's GPIO control register *addr*
 MASK! | func  | ( flg addr mask — ) | *flg* == true: *[addr]* ← *[addr]* OR *mask*; *flg* == false: *[addr]* ← (NOT *[addr]*) AND *mask*
+PADS1V8 | func | ( — ) | select 1.8v for pads bank 0
+PADS3V3 | func | ( — ) | select 3.3v for pads bank 0
+@PAD  | func  | ( pin — addr ) | convert *pin* number to it's PAD *addr*
+PAD@  | func  | ( pin — val ) | read *val* from the PAD *pin*
+PAD!  | func  | ( val pin — ) | write *val* to the PAD *pin*
+PU    | func  | ( pin — ) | set the PAD *pin* to pull-up, disabling pull-down
+PD    | func  | ( pin — ) | set the PAD *pin* to pull-down, disabling pull-up
+SCHMITT | func | ( flag pin — ) | set the Schmitt trigger input for *pin*
+SLEW  | func  | ( speed pin — ) | set the slew rate for *pin* to *speed*: fast (1) or slow (0)
+
+- Pin Function Select
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+FNC  | func  | ( pin func — ) | set *func* for *pin* (setting the GPIO status register)
+#SPI | func  | ( pin — ) | default GPIO *pin* as SPI
+#UART | func | ( pin — ) | default GPIO *pin* as UART
+#I2C | func  | ( pin — ) | default GPIO *pin* as I2C
+#PWM | func  | ( pin — ) | default GPIO *pin* as PWM
+#SIO | func  | ( pin — ) | default GPIO *pin* as SIO
+#PIO0 | func | ( pin — ) | default GPIO *pin* as PIO0
+#PIO1 | func | ( pin — ) | default GPIO *pin* as PIO1
+#USB | func  | ( pin — ) | default GPIO *pin* as USB
+
+- Simple I/O words
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+SIO! | func  | ( val reg — ) | store *val* in the appropriate SIO *reg*
+SIO@ | func  | ( reg — val ) | fetch *val* from the appropriate SIO *reg*
+FLOAT | func | ( pin — ) | set GPIO *pin* to float: tri-state
+PIN@ | func  | ( pin — bit ) | get the *bit* value of the input on GPIO *pin*
+PIN? | func  | ( pin — pin bit ) | get the *bit* value of the input on GPIO *pin* retaining the *pin* on stack: setup for a test
+HIGH | func  | ( pin — ) | set the value for GPIO *pin* output high (1)
+LOW  | func  | ( pin — ) | set the value for GPIO *pin* output low (0)
+TOGGLE | func | ( pin — ) | swap the value for GPIO *pin* from high to low, or low to high
+PIN! | func  | ( bit pin — ) | set the value for GPIO *pin* output to high or low dependent upon *bit* (0 or 1)
+WAITHI | func | ( pin — ) | wait for the GPIO *pin* input to enter the high (1) state
+WAITLO | func | ( pin — ) | wait for the GPIO *pin* input to enter the low (0) state
+WAITEDGE | func | ( pin — ) | wait from the GPIO *pin* input to transition from low to high, or high to low
