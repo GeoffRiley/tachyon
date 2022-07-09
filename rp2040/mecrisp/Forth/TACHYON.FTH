@@ -6,7 +6,7 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2206201800 constant tme
+2207081030 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
@@ -30,18 +30,28 @@ pre pri 	['] : execute ;
 \ use --- as a clear separator and comment (also same as Tachyon cr response: 12 . --- 12)
 pre ---		['] \ execute ;
 
+
 pre } 	;
-pub BOUNDS			OVER + SWAP ;
-pub >>				rshift ;
-pub <<				lshift ;
+
+	( simple conditional EXIT words )
+
+\ Exit if zero
+pub 0EXIT		0= IF R> DROP THEN ;
+\ Exit if true
+pub ?EXIT		IF R> DROP THEN ;
+
+
+pub BOUNDS		OVER + SWAP ;
+pub >>			rshift ;
+pub <<			lshift ;
 
 --- compile or stack literal value
-pri LIT				state C@ IF literal, THEN ;
-pri ASCLIT ( mask -- )		0 token BOUNDS DO 8 << OVER I C@ AND + LOOP NIP LIT  ;
+pri LIT			state C@ IF literal, THEN ;
+pri ASCLIT ( mask -- )	0 token BOUNDS DO 8 << OVER I C@ AND + LOOP NIP LIT  ;
 --- use instead of awkward [CHAR] and CHAR
-pre `				$FF ASCLIT ;
+pre `			$FF ASCLIT ;
 --- control char literal
-pre ^				$1F ASCLIT ;
+pre ^			$1F ASCLIT ;
 
 --- IP NOTATION:  IP# 192.168.0.101 .L --- C0A80065
 pre IP#
@@ -54,21 +64,31 @@ pre IP#
 pub CR			$0D EMIT ;
 pub CRLF		CR $0A EMIT ;
 --- form feed ensures compilation listing is not overwritten by FRED
-pub #FF         80 0 DO CRLF LOOP ;
+pub #FF         	80 0 DO CRLF LOOP ;
 
 	( CLEARTYPE WORDS )
 
 --- cleartype words are aliases that stand out from single Forth symbols in source code
 
-pub PRINT	. ;
-pre PRINT"	['] ." execute ;
+pub PRINT		. ;
+pre PRINT"		['] ." execute ;
 
 		( create vector table )
-
+{
 pub VECTORS ( cnt -- ) ( index -- adr )
 	<BUILDS CELLS HERE OVER ALLOT SWAP 0 FILL
 	DOES> SWAP CELLS +
 ;
+}
+\ build a table of vectors that can be indexed automatically but limited by count
+\ initially all the vectors are zeroed and the max index is stored before vectors
+\ The last vector is also the	max index so it could be set for exceptions.
+pub VECTORS ( cnt -- ) ( index -- adr )
+	<BUILDS DUP , CELLS HERE  OVER ALLOT   SWAP 0 FILL
+	DOES> SWAP OVER @ MIN 1+ CELLS +
+;
+
+
 
 pub .RSTACK
     CRLF PRINT" RETURN STACK: " HEX
@@ -101,6 +121,10 @@ pub UNMUTED		save-emit @ EMIT! ;
 
 
 
+
+
+
+{
 0 variable ~mkey
 pri MKEY?	~mkey @ ;
 pri MKEY ( key -- )
@@ -116,6 +140,36 @@ pri MLOAD ( addr -- )
     ['] MKEY hook-key !
     ['] MKEY? hook-key? !
 ;
+}
+
+$20028000 constant tbuf
+0 variable ~mkey
+pri MKEY?	~mkey @ ;
+pri MKEY ( key -- )
+    MKEY? C@ DUP
+    IF 1 ~mkey +!
+    ELSE
+    ['] serial-key ['] serial-key? KEYS!
+    THEN
+;
+
+--- load from memory as key input device
+pub MLOAD ( addr -- )    ~mkey ! ['] MKEY ['] MKEY? KEYS! ;
+pub MSAVE ( addr -- )
+    cycles tbuf					--- setup timing and buffer
+    BEGIN KEY? UNTIL 				--- wait for first char
+    BEGIN
+      KEY? IF KEY OVER C! 1+ 0 OVER C! 		--- buffer key and terminator
+      NIP cycles SWAP 0				--- reset timing and flag
+      ELSE OVER cycles - ABS 100000 > THEN	--- check timeout?
+    UNTIL
+    2DROP
+;
+pub FL
+    BEGIN KEY? WHILE KEY DROP 5 ms REPEAT	--- flush existing keys
+    tbuf MSAVE tbuf MLOAD				--- all buffered - now load
+;
+
 
 
 
@@ -131,8 +185,8 @@ pub !SP			SP@ DEPTH 1- CELLS + SP! ;
 0 variable ~laps 4 allot
 pub LAP 		cycles ~laps @ ~laps CELL+ ! ~laps ! ;
 pub LAP@
-	~laps @ ~laps CELL+ @ -
-	LAP LAP ~laps @ ~laps CELL+ @ - -
+    ~laps @ ~laps CELL+ @ -
+    LAP LAP ~laps @ ~laps CELL+ @ - -
 ;
 
 	( Terminal source code loader mode )
@@ -172,7 +226,7 @@ pub mecrisp	HERE ~m ! @org @ ~o ! !SP CRLF LAP ;
 0 ctrls 128 0 FILL
 
 --- Set vector of control key n with cfa
-pub CTRL! ( cfa n -- )  	ctrls ! ;
+pub CTRL! ( cfa n -- )  	$1F AND ctrls ! ;
 
 \ USER DEBUG HOOK
 \ 0 variable 'debug
@@ -204,49 +258,36 @@ pub POLLS
 pub +POLL ( cfa -- )
 	4 0 DO I @POLL @ 0= IF DUP I @POLL ! LEAVE THEN LOOP DROP
 ;
-{
-R00# 0 variable x1 ---
-R00# : POLL1 x1 ++ ; ---
-R00# ' poll1 +poll ---
-R00# x1 @ . --- 2850947
-R00# X1 @ . --- 5563090
-}
-{
-
-pub EDKEY ( --- code )
-    KEY DUP $1B =
-    IF  cycles SWAP
-      BEGIN KEY?
----                ignore ;      else merge to code       update timeout
-        IF KEY DUP ` ; = IF DROP ELSE SWAP 8 << OR THEN   NIP cycles SWAP THEN
----     timeout after 3ms of inactivity - must be end of sequence
-        OVER cycles - ABS 3000 >
-      UNTIL NIP
-    THEN DUP ~skeys !
-;
-
---- diagnostic to check key sequences
-pri CHKKEYS BEGIN CRLF EDKEY DUP .L 3 = UNTIL ;
-
-
-}
 
 --- SERIAL KEY INPUT that also POLLS when idle and execute control keys
 pub QKEY
+    BEGIN
+--- while waiting for input also handle any polls
     BEGIN serial-key? 0= WHILE POLLS REPEAT
+--- process control keys internally and either execute or pass if no action set
+    serial-key DUP $20 <
+    WHILE DUP ctrls @ 0EXIT   ctrls @ EXECUTE
+    REPEAT
+;
+
+{
+--- SERIAL KEY INPUT that also POLLS when idle and execute control keys
+pub QKEY
+--- while waiting for input also handle any polls
+    BEGIN serial-key? 0= WHILE POLLS REPEAT
+--- process control keys internally and either execute or pass if no action set
     serial-key DUP $20 <
     IF DUP ctrls @ ?DUP IF NIP EXECUTE $0D THEN THEN
 ;
-\ ['] serial-key ['] serial-key? KEYS!
+}
+--- Init QKEY in place of standard key (used during QUERY)
 pri !QKEY	['] QKEY ['] serial-key? KEYS! ;
 
 0 variable ~defers  ( note: just a single deferred execution vector for now)
 0 variable ~depth
 --- execute deferred words at the end of the line
-pub defers
-	~defers @ ?DUP IF 0 ~defers ! execute THEN
+pub defers	~defers @ ?DUP IF 0 ~defers ! execute THEN ;
 
-;
 --- defer the exection of this word until the end of the line
 pub ->	R> ~defers ! DEPTH ~depth C! ;
 
@@ -261,14 +302,14 @@ pub .base
       endcase
 ;
 pub .depth	depth 10 /MOD EMITD EMITD ;
-pub .mode		compiletoram? if ." R" else ." F" then ;
+pub .mode	compiletoram? if ." R" else ." F" then ;
 
 --- placeholder for compex magic - maybe
 pub COMPEX
 
 ;
 
---- setup query vector - defined later
+--- setup 4 vector - defined later
 ' query variable ~query
 
 pub prompt	CRLF .mode .depth .base space ;
@@ -338,7 +379,7 @@ pre long			1 (longs) ;
 	( some Tachyon like utility words )
 
 
-pub shift ( n +/-cnt -- )		DUP 0< IF NEGATE >> ELSE << THEN ;
+pub shift ( n +/-cnt -- )	DUP 0< IF NEGATE >> ELSE << THEN ;
 --- convert bit to mask
 pub >| ( mask -- bit )		0 BEGIN OVER 1 AND 0= WHILE SWAP 2/ SWAP 1+ REPEAT NIP ;
 pub |< ( b -- m )		1 SWAP << ;
@@ -354,10 +395,10 @@ pub >N				4 BITS ;
 pub >B				8 BITS ;
 pub >W 				16 << 16 >> ;
 pub W>B ( w -- lb hb )		DUP 8 BITS SWAP 8 >> ;
-pub L>W ( long -- lw hw )		DUP 16 BITS SWAP 16 >> ;
+pub L>W ( long -- lw hw )	DUP 16 BITS SWAP 16 >> ;
 
-pub HH!  				SWAP 16 << OVER @ 16 << 16 >> OR SWAP ! ;
-pub LH! 				SWAP OVER @ 16 >> 16 << OR SWAP ! ;
+pub HH!  			SWAP 16 << OVER @ 16 << 16 >> OR SWAP ! ;
+pub LH! 			SWAP OVER @ 16 >> 16 << OR SWAP ! ;
 pub HH@				@ 16 >> ;
 
 --- clear and set long
@@ -372,14 +413,14 @@ pub --				-1 SWAP +! ;
 --- increment byte
 pub C++				1 SWAP C+! ;
 --- increment B (TOS+1)
-pub B++ ( b a -- b+1 a )		SWAP 1+ SWAP ;
+pub B++ ( b a -- b+1 a )	SWAP 1+ SWAP ;
 
 pub C@++ ( adr -- adr+1 n )	DUP 1+ SWAP C@ ;
 
 pub 3RD				2 PICK ;
 pub 4TH				3 PICK ;
 
-pub ERASE				0 FILL ;
+pub ERASE			0 FILL ;
 
 pub WITHIN ( n min max -- f ) 	2 PICK >= ROT ROT >= AND ;
 pub LIMIT ( n min max -- n )	>R MAX R> MIN ;
@@ -405,12 +446,6 @@ pub s			1000 * ms ;
 
 
 
-	( simple conditional EXIT words )
-
-\ Exit if zero
-pub 0EXIT		0= IF R> DROP THEN ;
-\ Exit if true
-pub ?EXIT		IF R> DROP THEN ;
 
 
 
@@ -512,17 +547,37 @@ pub ESC[			` [ ESC ;
 --- ESC [ ch
 pri CSI ( ch -- )		ESC[ EMIT ;
 pub HOME			` H CSI ;
-
-pri COL ( col fg/bg -- )	CSI ` 0 + EMIT ` m EMIT ;
-\ pri COL ( col fg/bg -- )	CSI 0 <# #S #> TYPE ` m EMIT ;
-pub PEN! ( col -- )		dup ~pen ! 7 AND ` 3 COL ; --- 1B 5B 33 m
-pub PEN ( col -- )		DUP ~pen C@ <> IF PEN! ELSE DROP THEN ;
-
-pub PAPER! ( col -- )		dup ~paper ! ` 4 COL ;
-pub PAPER ( col -- )		DUP ~paper C@ <> IF PAPER! ELSE DROP THEN ;
-
-
 pri .PAR ( n ch -- )		SWAP 0 <# #S #> TYPE EMIT ;
+pri .PAR; ( n  -- )		` ; SWAP 0 <# #S #> TYPE EMIT ;
+pri COL8! ( n a -- ) 		ESC[  .PAR; ." 5;" ` m .PAR ;
+pub @! ( n a -- n )		DUP @ -ROT ! ;
+pub PEN8 ( col -- )		DUP ~pen @! OVER <> IF 38 COL8! ELSE DROP THEN ;
+pub PAPER8 ( col -- )		DUP ~paper @! OVER <> IF 48 COL8! ELSE DROP THEN ;
+pri COL24! ( rgb a -- )		ESC[ .PAR; ." 2;" DUP 16 >> .PAR; DUP 8 >> >B .PAR; >B ` m .PAR ;
+pub PEN24 ( col -- )		DUP ~pen @! OVER <> IF 38 COL24! ELSE DROP THEN ;
+
+pri COL! ( col fg/bg -- )	CSI ` 0 + EMIT ` m EMIT ;
+\ pri COL ( col fg/bg -- )	CSI 0 <# #S #> TYPE ` m EMIT ;
+pub PEN ( col -- )		DUP ~pen @! OVER <> IF ` 3 COL! ELSE DROP THEN ;
+
+pub PAPER ( col -- )		DUP ~paper @! OVER <> IF ` 4 COL! ELSE DROP THEN ;
+
+
+{
+24-bit ESC[ 38;2;⟨r⟩;⟨g⟩;⟨b⟩ m Select RGB foreground color
+pri COL24! ( n a -- ) 		ESC[  .PAR; ." 2;" DUP 16 >> .PAR; 8 >> >B .PAR; >B ` m .PAR ;
+pub PEN24 ( col -- )		DUP ~pen @! OVER <> IF 38 COL24! ELSE DROP THEN ;
+
+pri COL! ( col fg/bg -- )	CSI .PAR ` m EMIT ;
+pub PEN ( col -- )		DUP ~pen @! OVER <> IF ` 3 COL! ELSE DROP THEN ;
+pub PAPER ( col -- )		DUP ~paper @! OVER <> IF ` 4 COL! ELSE DROP THEN ;
+
+: Q   256 0 DO I PEN ` # EMIT LOOP PLAIN ;
+
+: Q1  s" FRED.BIN" FOPEN$ IF FSIZE@ 0 DO I SDC@ EMIT LOOP THEN ;
+}
+
+
 pri CUR ( cmd n -- )	    	ESC[ SWAP .PAR ;
 pub XY ( x y -- )		` ; SWAP CUR ` H .PAR ;
 
@@ -562,17 +617,17 @@ pub EMOJI ( ch -- )		$F0 EMIT $9F EMIT DUP 6 >> $98 + EMIT $3F AND $80 + EMIT ;
 	( *** PRINT HEX & BINARY *** )
 
 
-pub .HEX ( n cnt -- ) HEX  <# 0 DO # LOOP #> TYPE DECIMAL ;
-pub .B		0 2 .HEX ;
-pub .H		0 4 .HEX ;
-pub .L	   	0 8 .HEX ;
+pub .HEX ( n cnt -- )	HEX  <# 0 DO # LOOP #> TYPE DECIMAL ;
+pub .B			0 2 .HEX ;
+pub .H			0 4 .HEX ;
+pub .L	   		0 8 .HEX ;
 pub .BINX
     32 OVER - ROT SWAP <<  SWAP 0
     DO I IF I 3 AND 0= IF $5F EMIT THEN  THEN ROL DUP 1 AND EMITD LOOP
     DROP ;
-pub .BIN	32 .BINX ;
-pub .BIN8	8 .BINX ;
-pub .BYTE	` $ EMIT .B ;
+pub .BIN		32 .BINX ;
+pub .BIN8		8 .BINX ;
+pub .BYTE		` $ EMIT .B ;
 
 	( *** PRINT DECIMAL NUMBER *** )
 
@@ -611,17 +666,17 @@ pub D.DECS ( d. cnt -- )
 pub .DECS ( n cnt -- )	0 SWAP D.DECS ;
 
 \ print n to decimal places dp to fit width w
-pub .DP ( n w dp -- )		ROT 0 <# ROT 0 DO # LOOP ` . HOLD #S #> ROT OVER - SPACES TYPE ;
+pub .DP ( n w dp -- )	ROT 0 <# ROT 0 DO # LOOP ` . HOLD #S #> ROT OVER - SPACES TYPE ;
 
 
 
 long ~sp
-pub SPINNER	~sp C@ 3 AND s" |/-\" DROP + C@ EMIT 8 EMIT ~sp C++ ;
+pub SPINNER		~sp C@ 3 AND s" |/-\" DROP + C@ EMIT 8 EMIT ~sp C++ ;
 
 
 	( TIMING REPORTING TOOLS )
 
-pub .LAP			LAP@ .DEC PRINT" us" ;
+pub .LAP		LAP@ .DEC PRINT" us" ;
 pub .LAPS ( n -- )	LAP@ 1000 ROT */ .DEC PRINT" ns" ;
 
 pub *END*
@@ -675,6 +730,12 @@ pub DUMP
        ;
 pub DUMPA	BOUNDS DO I .ADDR I 64 (DUMPA) 64 +LOOP	MEM ;
 pub DUMPAW	BOUNDS DO I .ADDR I 128 (DUMPA) 128 +LOOP MEM ;
+pub DUMPAW
+    BOUNDS DO
+    0 I 128 BOUNDS DO I DMC@ 0= I DMC@ $FF = OR IF 1+ THEN LOOP 128 <>
+    IF I .ADDR I 128 (DUMPA) THEN 128 +LOOP MEM
+    ;
+
 pub DUMPL
 	BOUNDS DO I .ADDR
 	  I 32 BOUNDS DO I DM@ .L SPACE 4 +LOOP
@@ -951,6 +1012,10 @@ SPIO0	TX	UART1	RTS	I2C1	SCL	PWM3	B	SIO	PIO0	PIO1
 : HIGH ( pin -- )	bit DUP IOSET SIO! OESET SIO! ;
 : LOW ( pin -- )	bit DUP IOCLR SIO! OESET SIO! ;
 : TOGGLE ( pin -- ) 	bit DUP IOXOR SIO! OESET SIO! ;
+{
+2000D926: 61C3  str r3 [ r0 #1C ]	; sets the output register
+2000D928: 6243  str r3 [ r0 #24 ]	; sets the OE
+}
 : PIN! ( b0 pin -- )	SWAP 1 AND IF HIGH ELSE LOW THEN ;
 
 : WAITHI ( pin -- )	BEGIN PIN? UNTIL LAP DROP ;
@@ -1141,9 +1206,17 @@ $40050000 variable ~pwm --- base address of PWM
 : green! ( n -- )	16 << NEO! ;
 
  \ : DEMO 		0 $1000 BOUNDS DO I 8 NEOS! 100 ms 4 +LOOP ;
+{
+: DEMO    BEGIN 26 PIN@ IF $40 green! ELSE $40 red! THEN 10 ms KEY? UNTIL .adcs ;
+
+100K --> GP26 (analog+schmitt)
+Trips high at 7.15V in
+Trips low at 5.85V in
+
+: DEMO  0 BEGIN 26 PIN@ SWAP OVER <> IF CRLF DUP IF ." HIGH" ELSE ." LOW" THEN .ADCS 10 ms KEY? UNTIL ;
 
 
-
+}
 	( UARTS )
 
 0 variable ~uart
@@ -1166,15 +1239,23 @@ UART0
 
 115200 variable ~baud
 
+{
+You can calculate the 6-bit fractionalby taking the fractional part of the required baud rate divisor
+ and multiplying it by 64
+}
 \ Setup the current selected UART and set its baud rate
 \ If baud < 300 then use this as a direct divisor inc 4-bit fractional
 pub BAUD ( baud -- )
+--- save a copy for reference
     DUP ~baud !
+---  now divide the clock freq by the baud
     DUP 299 > IF clkfreq  SWAP / THEN
-    DUP 4 >> IBRD !  $0F AND 2 << FBRD !
-    $301 UCR !
-    $70 LCR !
+--- set integer baud and also fractional baud x64 ( 6 -4 not taken = 2 <<)
+    DUP 4 >> IBRD !     $0F AND 2 << FBRD !
+--- enable UART and 8N1
+    $301 UCR !    $70 LCR !
 ;
+
 
 --- change console baud rate
 pub CONBAUD	UART0 BAUD ;
@@ -2364,10 +2445,11 @@ pub FKEY? 			@FILE DUP 0EXIT DROP FSIZE@ >= _fread @ ;
 
 ( offset -- ) --- Load current file
 pub -FLOAD ( addr -- )		_fread ! ['] FKEY  ['] FKEY?  KEYS! ;
-
 pub FLOAD			!FPOP FOPEN 0 -FLOAD ;
+--- load the current file and quit
+pub RELOAD			-FLOAD QUIT ;
 
-pub INCLUDE ( <name> -- )
+pub #INCLUDE ( <name> -- )
     SERIAL? IF PRINT" INCLUDE " TOKEN TYPE
     ELSE  FPUSH FOPEN 0 -FLOAD THEN
 ;
@@ -2384,6 +2466,8 @@ pub -FPRINT
     LOOP
 ;
 pub FPRINT	FOPEN -FPRINT ;
+pub FPRINTB	FOPEN CRLF FSIZE@ 0 DO I SDC@ EMIT LOOP ;
+
 
 pub CD$		@FILE CWD!  file$ cwd$ $! ;
 
@@ -2563,7 +2647,7 @@ long btime	--- time at reset
 long bms	--- ms time at reset
 
 byte ~rtc
---- rtc buffer
+--- rtc buffer (mirrors genereal order of RTC registers)
 byte @sec
 byte @min
 byte @hour
@@ -2571,6 +2655,8 @@ byte @day
 byte @date
 byte @month
 byte @year
+
+pub DAY@			@day C@ 7 AND ;
 
 
 	( *** RV-3028-C7 RTC *** )
@@ -2605,6 +2691,7 @@ pub RDRTC
 ---	read
 	<I2C> @RTC 1+ I2C!    @sec 6 BOUNDS DO I2C@ I C! LOOP
 	nakI2C@ @year C! I2C.STOP
+--- swap day/date on PCF8563
 	8563? IF @day C@ @date C@ @day C! @date C! THEN
 	;
 
@@ -2644,12 +2731,13 @@ pri RTC3! 			3 BOUNDS DO I RTCB! LOOP ;
 \ pub TIME! ( hhmmss -- )		!RTC 100 U/MOD SWAP 0 RTCB! 100 U/MOD SWAP 1 RTCB! 2 RTCB! ;
 pub TIME! ( hhmmss -- )
  	RTC? IF !RTC DUP HMS SWAP ROT  RTCSEC RTC3! THEN QTIME! ;
-pub DAY!			7 AND @day C! ; \ 3 RTC! ;
+--- day of the week is 1 to 7 (mon to sun) but stored as 0..6
+pub DAY!			1- 7 AND @day C! ; \ 3 RTC! ;
 pub DATE! ( yymmdd -- )
     HMS @year C! @month C! @date C!
     RTC? IF !RTC  @RTC $A2 =
-      IF @date C@ 5 RTCB! @month C@ 7 RTCB! @year C@ 8 RTCB! @day C@ 6 RTC!
-      ELSE @date C@ 4 RTCB! @month C@ 5 RTCB! @year C@ 6 RTCB! @day C@ 3 RTC!
+      IF @date C@ 5 RTCB! @month C@ 7 RTCB! @year C@ 8 RTCB! DAY@ 6 RTC!
+      ELSE @date C@ 4 RTCB! @month C@ 5 RTCB! @year C@ 6 RTCB! DAY@ 3 RTC!
       THEN
     THEN
 ;
@@ -2661,13 +2749,12 @@ DS3231	s m h W D M Y
 --- read bcd fields and mask before converting to decimal
 pub TIME@			RTC? IF RDRTC @sec U@ $3F7F7F AND BCD>DEC ELSE QTIME@ THEN ;
 pub DATE@			RDRTC @date U@ $FF1F3F AND BCD>DEC ;
-pub DAY@			@day C@ 7 AND 1 MAX ;
 
 pub .DT				DATE@ 6 U.R $2D EMIT TIME@ 6 Z U.R ;
 
 pub .HMS ( n ch -- )		>R HMS 2 Z U.R R@ EMIT 2 Z U.R R> EMIT 2 Z U.R ;
 pub .DATE			DATE@ ." 20" $2F .HMS ;
-pub .DAY			DAY@ 1- 3 * s" MONTUEWEDTHUFRISATSUN" DROP + 3 TYPE ;
+pub .DAY			DAY@ 3 * s" MONTUEWEDTHUFRISATSUN" DROP + 3 TYPE ;
 pub .TIME			TIME@ $3A .HMS ;
 pub .FDT			.DATE SPACE .DAY SPACE .TIME ;
 
@@ -2939,6 +3026,7 @@ ascii-xfr -sn Forth/$1.FTH > /dev/ttyUSB$2
 
 CHANGELOG:
 
+220704	Fix weekday in RTC as 0 to 6
 220528	Add in checks for SD card and mounting for file ops
 	Added MLOAD - fast load can use this but so can FRED
 220522	Problem with MAKERPICO microSD setup - allowing for external adaptor as well
@@ -2993,6 +3081,8 @@ CHANGELOG:
 211111	Make RTC address user settable
 211110	Added I2C and RTC
 211024	Added polling via QKEY
+
+NOTES:	Mecrisp uses $2003FE00 onwards for Flash variables
 }
 {
 +------------------------------------------------------------------------------------------------------------------------------+
@@ -3015,3 +3105,5 @@ CHANGELOG:
 
 compiletoram
 *END*
+( use 1 SAVE# before loading to save a copy of the Mecrisp kernel )
+( Use 2 SAVE# if you want a clean copy of Mecrisp+Tachyon )
