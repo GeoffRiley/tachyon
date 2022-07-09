@@ -20,6 +20,8 @@ pub  | pre   | | public colon definition (normal)
 pri  | pre   | | private colon definition (can be hidden later)
 ---  | pre   | | use as a clear separator and comment
 }    | pre   | | do nothing, terminator for block comments
+0EXIT | pub  | ( n — ) | exit if value on stack, *n*, is equal to zero
+?EXIT | pub  | ( flag — ) | exit if *flag* on stack is true
 BOUNDS | pub | ( s-addr len — e-addr s-addr ) | e-addr ← s-addr + len: setup an end address by adding a length to the start address
 \>\> | pub   | ( n1 u — n2 ) | n2 ← n1 / 2^u, logical shift *n1* to the right by *u* bit-places, zero filling at the left
 <<   | pub   | ( n1 u — n2 ) | n2 ← n1 * 2^u, logical shift *n1* to the left by *u* bit-places, zero filling at the right
@@ -69,10 +71,13 @@ SERIAL? | pub | | check is input is being taken from the serial port
 save-emit | var | | variable to save the value of *serial-emit*/*hook-emit* during muting
 MUTED | pub  | | save *hook-emit* in *save-emit*; set *hook-emit* to *DROP*
 UNMUTED | pub | | restore *hook_emit* from *save-emit*
+tbuf | const | | ← $2002800: tying buffer
 ~mkey | var  | | variable holding the multi-key entry buffer pointer
 MKEY? | pri  | ( — addr ) | return the multi-key entry buffer pointer
 MKEY | pri   | ( key — ) | look for new multi-key entries and increment *~mkey* or reset to using straight serial key routines
-MLOAD | pri  | ( addr — ) | initialise *~mkey* and direct import stream through the multi-key routines
+MLOAD | pub  | ( addr — ) | initialise *~mkey* and direct import stream through the multi-key routines
+MSAVE | pub  | ( addr — ) | save input stream to buffer at *addr* until timeout occurs
+FL   | pub   | | fast load input to a buffer before compiling after transfer completes
 
 - Initialise stack pointer
 
@@ -109,7 +114,7 @@ mecrisp | pub | | initialise *~m*, *~o*, stack and *~laps*
 word | type  | stack | comment
 ---  | :---: | :---: | ---
 ctrls | VECTORS | | an array of 32 vectors corresponding to the 32 control keys; initialised to zeros
-CTRL! | pub  | ( cfa n — ) | *ctrls[n]* ← *cfa*: save the function address in the *n*th vector
+CTRL! | pub  | ( cfa n — ) | *ctrls[n]* ← *cfa* AND $1F: save the function address in the *n*th vector
 ~k   | var   | | variable for last command entry
 REX  | pri   | | re-execute last entry
 DISCARD | pri | | discard and reset the CLI **NOT SURE HOW THIS WORKS**
@@ -210,13 +215,6 @@ ON   | const | | ← 1
 OFF  | const | | ← 0
 1K   | const | | ← 1000
 
-- Simple conditional EXIT words
-
-word | type  | stack | comment
----  | :---: | :---: | ---
-0EXIT | pub  | ( n — ) | if *n* == 0 remove the top element from the return stack: return from the calling word
-?EXIT | pub  | ( f — ) | if *f* is true remove the top element from the return stack: return from the calling word
-
 - unaligned longs
 
 word | type  | stack | comment
@@ -294,12 +292,17 @@ ESC   | pub   | ( c — ) | output and escape character ($1B) followed by the gi
 ESC[  | pub   | ( — ) | output the standard ANSI introduction sequence (ESC-[)
 CSI   | pri   | ( c — ) | output the ANSI introduction followed by the character *c*
 HOME  | pub   | ( — ) | move the output cursor to co-ordinate (1,1): top left corner
-COL   | pri   | ( col fg/bg — ) | set the foreground/background colour
-PEN!  | pub   | ( col — ) | set and store the foreground colour
-PEN   | pub   | ( col — ) | if different, set and store the foreground colour
-PAPER! | pub  | ( col — ) | set and store the background colour
-PAPER | pub   | ( col — ) | if different, set and store the background colour
 .PAR  | pri   | ( u c — ) | output *u* as a decimal value followed by the character *c*
+.PAR; | pri   | ( u — ) | output *u* as a decimal value followed by a semicolon
+COL8! | pri   | ( u a — ) | output then ANSI control sequence to set an 8 bit colour, *u*, for the foreground (*a* = 38) or background (*a* == 48)
+@!    | pub   | ( n a — n ) | retrieve the value from *a* and store it in *n*, returning *n*
+PEN8  | pub   | ( col — ) | if different, set and store the 8 bit foreground colour
+PAPER8 | pub  | ( col — ) | if different, set and store the 8 bit background colour
+COL24! | pri  | ( rgb a — ) | output then ANSI control sequence to set a 24 bit colour, *u*, for the foreground (*a* = 38) or background (*a* == 48)
+PEN24 | pub   | ( col — ) | if different, set and store the 24 bit foreground colour
+COL!  | pri   | ( attr — ) | set the SGR (foreground/background colour, font style, etc) directly
+PEN   | pub   | ( col — ) | if different, set and store the foreground colour
+PAPER | pub   | ( col — ) | if different, set and store the background colour
 CUR   | pri   | ( c n — ) | output the first half of a cursor positioning command with *n* as the parameter and *c* as the separator
 XY    | pub   | ( x y — ) | move the output cursor to co-ordinate (x,y): top left = (1,1)
 ERSCR | pub   | ( — ) | erase the screen, leaving the cursor where it is
