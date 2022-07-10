@@ -500,3 +500,32 @@ PIN! | func  | ( bit pin — ) | set the value for GPIO *pin* output to high or 
 WAITHI | func | ( pin — ) | wait for the GPIO *pin* input to enter the high (1) state
 WAITLO | func | ( pin — ) | wait for the GPIO *pin* input to enter the low (0) state
 WAITEDGE | func | ( pin — ) | wait from the GPIO *pin* input to transition from low to high, or high to low
+~pin | long  | | long variable space allocated on heap: contains the 'current' pin
+PIN  | func  | ( pin — ) | set the operating *pin* for future function
+H    | func  | ( — ) | set the current pin high
+L    | func  | ( — ) | set the current pin low
+F    | func  | ( — ) | set the current pin to float: tri-state
+.FNC | func  | ( pin — ) | print the function for *pin*: 'GPIO', 'SPI ', 'UART', etc (always four characters)
+.PIN | func  | ( pin — ) | print the state of *pin*: function, allocated PAD, i/o direction, H/L condition, GPIO status and control registers
+lsio | func  | ( ­— ) | print out the state of the GPIO pins from 0 to 29.
+|    | key   | ^P | execute *lsio*
+
+- PWM: Pulse Width Modulation
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+~pwm | var   | | ← $40050000: base address of the PWM
+@PWM | func  | ( offset — abs-addr ) | convert the absolute address, *abs-addr*, for a given parameter
+PWMCSR | func | ( — abs-addr ) | return *abs-addr* of CSR: control and status register
+PWMDIV | func | ( — abs-addr ) | return *abs-addr* of DIV: clock divider register (INT/FRAC form a fixed point fractional number)
+PWMCTR | func | ( — abs-addr ) | return *abs-addr* of CTR: direct access to PWM counter
+PWMCC | func | ( — abs-addr ) | return *abs-addr* of CC: counter compare values
+PWMTOP | func | ( — abs-addr ) | return *abs-addr* of TOP:  counter wrap value
+PWMCC! | func | ( u16 — ) | store 16 bit value *u16* in the top or bottom half of the CC dependent upon 'current' pin, *~pin*
+!PWM | func  | ( — ) | setup the PWM base address for the 'current' pin, *~pin*
+PWM  | func  | ( on off div — ) | set the duty cycle and divider for the 'current' pin
+MUTE | func  | ( — ) | mute the current pin by setting it to SIO mode
+HZ   | func  | ( freq — ) | set the PWM for the 'current' pin to produce a *freq* Hz square wave
+KHZ  | func  | ( freq — ) | set the PWM for the 'current' pin to produce a *freq* KHz square wave
+DUTY | func  | ( on frame — ) | change the duty cycle within the frame cycle without changing the frequency
+PWM% | func  | ( duty% — ) | set the 'current' pin to produce a 1KHz square ware at *duty%* percentage
