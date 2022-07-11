@@ -529,3 +529,22 @@ HZ   | func  | ( freq — ) | set the PWM for the 'current' pin to produce a *fr
 KHZ  | func  | ( freq — ) | set the PWM for the 'current' pin to produce a *freq* KHz square wave
 DUTY | func  | ( on frame — ) | change the duty cycle within the frame cycle without changing the frequency
 PWM% | func  | ( duty% — ) | set the 'current' pin to produce a 1KHz square ware at *duty%* percentage
+
+- Simple sounds
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+spkr | var   | | ← 0: pin assigned to 'speaker'
+TONE | func  | ( hz ms — ) | produce a *hz* hertz tone for *ms* milliseconds
+CLICK | func | ( — ) | produce a click sound
+BIP  | func  | ( — ) | produce a 3KHz tone for 50ms
+BEEP | func  | ( — ) | produce a 3KHz tone for 150ms
+BEEPS | func | ( n — ) | produce *n* 3KHz tones lasting 150ms each with a 50ms gap between each
+WARBLE | func | ( hz1 hz2 ms — ) | produce a sequence of 3 double tone signals at *hz1* hertz and *hz2* hertz, each lasting *ms* milliseconds
+SIREN | func | ( — ) | produce a 'siren' effect of duotones at 400Hz/550Hz for 400ms each, repeating the sequence three times
+~R   | func  | ( — ) | produce a 'trill' effect of duotones at 500Hz/600Hz for 40ms each, repeating the sequence three times
+RING | func  | ( — ) | produce a 'ring ring' effect using the *~R* trill twice waiting 200ms between
+RINGS | func | ( n — ) | produce a set of *n* *RING* effects with a 1 second pause between each
+ZAP  | func  | ( — ) | produce a rising 'laser fire' sound effect
+ZAPS | func  | ( n — ) | produce a series of *n* 'laser fire' zaps with a 50ms pause between each 'shot'
+SAUCER | func | ( — ) | produce a 'flying saucer' sound effect
