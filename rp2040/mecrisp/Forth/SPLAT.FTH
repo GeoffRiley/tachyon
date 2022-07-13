@@ -607,8 +607,8 @@ pri ALTS
 	;
 pri CTLS
 	CASE
-	` D OF 1 ` < KEY!			ENDOF
-	` C OF 1 ` > KEY!			ENDOF
+\	` D OF 1 ` < KEY!			ENDOF
+\	` C OF 1 ` > KEY!			ENDOF
 	ENDCASE
 	;
 pri CTSHS

@@ -5,9 +5,12 @@ mecrisp
 ~edsect org  FORGET *FRED*      --- reclaim code and data
     org? org                    --- use latest org? -  all modules will define this to indicate next free
 
-pub *FRED*      PRINT" FRED - Forth Rapid Embedded Development Editor 220704-0921 " ;
-
+pub *FRED*      PRINT" FRED - Forth Rapid Embedded Development Editor 220713-2346 " ;
 {
+TABLE OF CONTENTS
+    *THEME*
+    *HIGHLIGHTING*
+
 TO DO:  Limit editing to file size
     insert/delete page
     add horizontal scroll
@@ -16,16 +19,13 @@ TO DO:  Limit editing to file size
     also other directives i.e. set theme, modes, etc.
     add conditional compile directives #IFDEF #IF etc
     column select mode - maybe ^B ^B first or ALT B
-
+    hypertext - table of contents etc.
 }
 
 --- Placing  here allows FRED to load back over itself ( RELOAD now QUITS anyway )
 pri EDLOAD              PLAIN  -FLOAD  QUIT ;
 
 (   !!! PATCHES !!!     )
-
-
-
 
 
 
@@ -72,7 +72,7 @@ pri ~theme ( -- a )     FTAB$ 16 + ;
 pri ~eflgs ( -- a )     FTAB$ 20 + ;
 pri ~offset             FTAB$ 24 + ;
 \       *** CURSOR TRACKING ***
-pri tcur@ ( -- cur )    ~tcur @ ;
+pri tcur@ ( -- cur )    ~tcur @ 0 FSIZE@ LIMIT ;
 pri tcur! ( cur -- )    ~tcur ! ;
 pri tcur+! ( n -- )     tcur@ + 0 MAX tcur! ;
 pri tcur-! ( n -- )     NEGATE tcur+! ;
@@ -135,15 +135,13 @@ pri !TEXTXY             @xy SWAP 9 + SWAP 4 + XY ;
 pri @STATUS             68 1 XY ;
 pri @FOOTER ( x -- )    pagesz ew / 4 + XY ;
 
-
-
 \       ... PAGE FORMATTING ...
 
 pri SETCR               pagebuf pagesz BOUNDS DO $0D I 127 + C! ew +LOOP ;
 --- convert block to CR delimited lines and replace nulls with spaces
 pri FORMAT.PAGE         pagebuf pagesz BOUNDS DO I C@ 0= IF $20 I C! THEN LOOP SETCR ;
 
-pub WIPE.PAGE               pagebuf pagesz $20 FILL FORMAT.PAGE ;
+pub WIPE.PAGE           pagebuf pagesz $20 FILL FORMAT.PAGE ;
 --- format the whole file as pages (blanks with CRs)
 pub FORMAT.PAGES
     @FILE 0EXIT
@@ -157,6 +155,8 @@ pub FORMAT.PAGES
     +LOOP
     RO
 ;
+--- confirm complete page format with Y
+pri ?FORMAT.PAGES       @STATUS PRINT"  Format? " KEY a>A ` Y = IF FORMAT.PAGES THEN ;
 
 
 
@@ -168,7 +168,7 @@ pub FORMAT.PAGES
 
 
 
-\      ... THEME ...    --- black red green yellow blue magenta cyan white
+\      ... *THEME* ...    --- black red green yellow blue magenta cyan white
 pub THEME               4 << OR 4 << OR 4 << OR ~theme ! ;
 pri -THEME              ~theme @ SWAP 2 << >> >B DUP >N PLAIN PEN 4 >> PAPER ;
 ---                     text paper info frame
@@ -254,7 +254,7 @@ pub EDKEY ( --- code )
       UNTIL NIP
     THEN DUP ~key ! ;
 
-\       ... HIGHLIGHTING ...
+\       ... *HIGHLIGHTING*  ...
 
 create :$   $20 C, ` : C, $0D C,
 pri ?CODE
@@ -446,7 +446,7 @@ pub EDCUT --- cut the selected block -OR- only copy if there is no begin
 
 
 
-\       *** FILE OPERATIONS ***
+\       ... FILE OPERATIONS ...
 
 --- check if file tab is active and open it - return with success flag
 pri OPENTAB? ( -- f )   FTAB$ @ IF FTAB$ FOPEN$ ELSE DROP FALSE THEN ;
@@ -510,7 +510,7 @@ pub MOVETAB ( left -- )
 --- interactive left/right placement exits on any other key
     BEGIN REFRESH EDKEY   CASE $1B5B44 OF MOVETABL ENDOF $1B5B43 OF MOVETABR ENDOF EXIT ENDCASE AGAIN ;
 
-\       *** FIND & HELP etc ***
+\       ... FIND & HELP etc ...
 pri ?EDFIND ( dir -- )
     ~find @
     IF tcur@ OVER +
@@ -522,8 +522,11 @@ pri ?EDFIND ( dir -- )
    THEN DROP @STATUS PRINT"  NOT FOUND     "
 ;
 pub EDFIND              s" FIND " EDINP ~find ! 1 ?EDFIND ;
---- confirm complete page format with Y
-pri ?FORMAT.PAGES       @STATUS PRINT"  Format? " KEY a>A ` Y = IF FORMAT.PAGES REFRESH THEN ;
+pri WLEN ( a ch -- n )  OVER SWAP BEGIN OVER C@ OVER <> WHILE b++ REPEAT DROP - ABS ;
+pub EDLINK              tcur@ PAGE DUP $20 WLEN DUP ~find ! TIB SWAP MOVE 1 ?EDFIND ;
+
+
+
 pri MARKEND             0 CLRLN REFRESH ;
 pri GOPAGE              1 MAX 1- pagesz * tcur! REFRESH ;
 pub EDPAGE              s" PAGE " EDNUM IF GOPAGE THEN ;
@@ -533,34 +536,66 @@ pri EDHELP              s" HELP" FOPEN$ IF 0 tcur! REFRESH THEN ;
 pri EDESC               !CLIPS REDRAW ;
 pri EDRET               CRLF PRINT" <RETURN>" KEY DROP CLS REFRESH ;
 pri EDFF                PLAIN #FF ` * 80 EMITS CRLF ;
-pub EDPRINT             EDFF -FPRINT EDRET ;
-pub EDPRINTP            EDFF BEGIN DUP C@ WHILE DUP C@ DUP EMIT $0D = IF $0A EMIT THEN 1+ REPEAT DROP EDRET ;
-pub EDQUIT              SAVECFG 1 @FOOTER -INFO PRINT"  CLOSED " PLAIN !SP QUIT ;
 pri EDFULL              128 ~dw C! REDRAW ;
 pri EDBS                1 tcur-! $20 EDCHAR! .LINE ;
 pri EDNOP               REFRESH ;
 pri REVTAB              tcur@ 8 - 7 ANDN tcur! ;
 pri EDBEGIN             !CLIPS tcur@ ~begin ! ~end ~ ;
 pri EDEDIT              wr? SETB REFRESH ;
+pub EDPRINT             EDFF -FPRINT EDRET ;
+pub EDPRINTP            EDFF BEGIN DUP C@ WHILE DUP C@ DUP EMIT $0D = IF $0A EMIT THEN 1+ REPEAT DROP EDRET ;
+pub EDQUIT              SAVECFG 1 @FOOTER -INFO PRINT"  CLOSED " PLAIN !SP QUIT ;
 
 
-INCLUDE IMPORT          --- ... include import to page format routines ...
+#INCLUDE IMPORT          --- ... include import to page format routines ...
+\     *** PORTING UTILITY  from/to page files ***
+pri IMPORT!
+    DUP $0A $0D WITHIN
+    IF OVER $0D = OVER $0A = AND NOT IF LEFTLN ew + tcur! THEN
+     --- write the character directly to the page buffer
+    ELSE DUP pagebuf tcur@ + C! 1 tcur+! THEN
+;
+pri IMPORTS ( srcsect size dstsec -- )
+    3RD OVER AND 0= IF 2DROP EXIT THEN
+--- reopen source as main file - setup dest
+    ROT OPEN-SECTOR         ~edsect ! 0 tcur! MUTED
+    WIPE.PAGE   0 SWAP 0 ( prevch size 0 )
+    DO
+--- get next char from source and end on null
+      FGET ?DUP
+--- process a single character checking for tabs
+      IF DUP $09 =
+        IF tcur@ 7 ANDN 8 + tcur!
+--- else handle CR/LF or characters
+        ELSE IMPORT!
+        THEN
+--- replace prev   save one full page
+        NIP       tcur@ pagesz >= IF SAVEPAGE pagesz 9 >> ~edsect +!     WIPE.PAGE 0 tcur! THEN
+      ELSE LEAVE THEN
+    LOOP
+---  insert terminator line
+    DROP LEFTLN ew + pagebuf + ew 1- 0 FILL
+    SAVEPAGE UNMUTED
+;
+pub IMPORT ( <from> <to> -- )
+    OPEN-FILE FSIZE@ ( sect size ) OPEN-FILE ( sect1 size sect2 ) IMPORTS ;
 
+
+
+
+\ : IMPORTS ;
 pub SAVEAS
     @FILE FSIZE@ ( src size )
     SAVEFILE RWC s" SAVE AS " EDOPEN?
     IF @FILE IMPORTS ADDTAB SHOWTAB ELSE 2DROP THEN
 ;
 pub EDOUT               ['] EDCHAR!!  EMIT! ;
-
 pri EDSTAMP             DATE@ EDOUT 6 Z U.R ` - EMIT TIME@ 100 / 4 Z U.R CON ;
-
 pri PAGE/CLIP ( -- a )
     1 @FOOTER  CRLF
-    ~clipsz @ ?DUP IF clipboard + C~ clipboard   DUP ~clipsz + 1+ C~
+    ~clipsz @ ?DUP IF clipboard + C~ clipboard   DUP ~clipsz + C~
 --- force a CR and null terminator into last 2 char of page
     ELSE $0D PAGEBUF pagesz 2- + H! PAGEBUF THEN
-
 ;
 --- go to last char in line -
 pri ENDLN               LEFTLN ew + BEGIN 1- DUP ED@ $20 > UNTIL 1+ tcur! ;
@@ -592,7 +627,7 @@ pri F9          dw 8 + $7 ANDN ew 1+ MOD 64 MAX ~dw C! REDRAW ;
 pri F10         SAVEFILE SAVECFG OPENTAB 1 @FOOTER CRLF  0 EDLOAD ;
 pri F11         ;
 pri F12         EDDIR EDKEY DROP file$ FOPEN$ DROP REFRESH ;
-pri ^F10        PAGE/CLIP MLOAD ;
+pri ^F10        PLAIN  1 @FOOTER CRLF PAGE/CLIP MLOAD QUIT ;
 pri _F3         -1 ?EDFIND REFRESH ;
 
 
@@ -712,7 +747,7 @@ pri EDCMD
     ` Z OF WIPE.PAGE REFRESH                    ENDOF   --- wipe & format page
     ^ P OF PAGE/CLIP EDPRINTP                   ENDOF   --- print page or clipboard
     ^ Q OF 1 @FOOTER  PLAIN CRLF QUIT           ENDOF   --- special debug quit
-    ^ Z OF ?FORMAT.PAGES                        ENDOF   --- page format the whole file
+    ^ Z OF ?FORMAT.PAGES REFRESH                ENDOF   --- page format the whole file
     ` L OF EDSIZE REDRAW                        ENDOF   --- set new page size
     ` C OF EDWIDTH REDRAW                       ENDOF
     ` 0 OF -MONO REFRESH                        ENDOF   --- mono theme
@@ -743,7 +778,7 @@ CREATE EDCTLS
         ' EDTAB ,       ' EDNOP ,       ' EDINS ,       ' PGDN ,        --- I J K L
         ' EDCR ,        ' NEWFILE ,     ' EDOPEN ,      ' EDPRINT ,     --- M N O P
         ' EDQUIT ,      ' REVERT ,      ' SAVEFILE ,    ' EDNOP ,       --- Q R S T
-        ' EDNOP ,       ' EDPASTE ,     ' CLOSETAB ,    ' EDCUT ,       --- U V W X
+        ' EDLINK ,      ' EDPASTE ,     ' CLOSETAB ,    ' EDCUT ,       --- U V W X
         ' EDCMD ,       ' UNDO ,        ' EDESC ,       ' EDNOP ,       --- Y Z [ \
         ' EDFULL ,      ' EDNOP ,       ' EDNOP ,                       --- ] ^ _
 \ J T U \ ] ^ _
@@ -785,6 +820,7 @@ pri EDTASK ( <addr>  -- )
 (       *** INIT EDIT ***      )
 pri !ED
     SD? 0= IF ."  No SD CARD! " QUIT THEN
+    !MOUNT
     ~edcold @ $A55A <>
     IF
       ~edsect ~edcold OVER - ERASE
@@ -794,7 +830,6 @@ pri !ED
       $A55A ~edcold !
     THEN
 ;
-
 
 
 

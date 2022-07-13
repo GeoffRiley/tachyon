@@ -2427,9 +2427,9 @@ pri FPUSH
     fstack DUP 16 + 48 MOVE
     fstack 16 ERASE
     file$ fstack $!  _fread @ fstack 12 + ! ;
-pri FPOP?
+pri FPOP? ( -- f )
     fstack C@ DUP 0EXIT
-    fstack FOPEN$   fstack 12 + @ _fread !
+    fstack FOPEN$ DROP  fstack 12 + @ _fread !
     fstack 16 + fstack 48 MOVE
     fstack 48 + 16 ERASE ;
 
