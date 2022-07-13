@@ -548,3 +548,42 @@ RINGS | func | ( n — ) | produce a set of *n* *RING* effects with a 1 second p
 ZAP  | func  | ( — ) | produce a rising 'laser fire' sound effect
 ZAPS | func  | ( n — ) | produce a series of *n* 'laser fire' zaps with a 50ms pause between each 'shot'
 SAUCER | func | ( — ) | produce a 'flying saucer' sound effect
+
+- Simple NeoPixel Driver
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+_neopin | var | | ← 28 *bit*; ($10000000)
+NEOPIN | func | ( n — ) | store selected neopin, *n*
+pixdly | func | ( — ) | short pixel delay
+pix1 | func  | ( — ) | set the neopixel to the on state
+pix0 | func  | ( — ) | clear the neopixel to the off state
+pix! | func  | ( f — ) | set or clear the neopixel conditional upon the flag *f*
+NEO! | func  | ( $ggrrbb — ) | set the colour of the neopixel on the encoded colour given by *$ggrrbb*
+NEOS! | func | ( buffer c — ) | write to a neopixel array from *buffer* of *c* elements each of four bytes
+RGB  | func  | ( red green blue — ) | set colour of the neopixel to the provided blend of *red*, *green* and *blue* values
+white! | func | ( — ) | set the neopixel to white
+blank! | func | ( — ) | set the neopixel to blank/black
+blue! | func | ( — ) | set the neopixel to blue
+red! | func | ( — ) | set the neopixel to red
+green! | func | ( — ) | set the neopixel to green
+
+- UARTS
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+~uart | var  | | ← 0
+UART0 | func | ( — ) | *~uart* ← $40034000; select the first UART
+UART1 | func | ( — ) | *~uart* ← $40048000; select the second UART
+UART | func  | ( n — addr ) | for a given uart register, *n*, return the appropriate access address, *addr*
+UDR  | func  | ( — addr ) | return the *addr* for the UDR register
+UFR  | func  | ( — addr ) | return the *addr* for the UFR register
+IBRD | func  | ( — addr ) | return the *addr* for the IBRD register
+FBRD | func  | ( — addr ) | return the *addr* for the FBRD register
+LCR  | func  | ( — addr ) | return the *addr* for the LCR register
+UCR  | func  | ( — addr ) | return the *addr* for the UCR register
+~baud | var  | | ← 115200: current baudrate (default: 115200)
+BAUD | func  | ( baud — ) | set the current UART to the required *baud*rate
+CONBAUD | func | ( baud — ) | set the console baudrate
+RX   | func  | ( — c ) | receive a character, *c*, from the active UART
+TX   | func  | ( c — ) | senc a character, *c*, to the active UART
