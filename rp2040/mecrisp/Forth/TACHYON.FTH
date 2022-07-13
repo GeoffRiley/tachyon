@@ -6,7 +6,7 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2207081030 constant tme
+2207131000 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
@@ -147,10 +147,7 @@ $20028000 constant tbuf
 pri MKEY?	~mkey @ ;
 pri MKEY ( key -- )
     MKEY? C@ DUP
-    IF 1 ~mkey +!
-    ELSE
-    ['] serial-key ['] serial-key? KEYS!
-    THEN
+    IF 1 ~mkey +! ELSE !SERKEY THEN
 ;
 
 --- load from memory as key input device
@@ -1443,12 +1440,12 @@ pub SDPINS ( csdodick -- ) ~sdpins ! SDCK bit &sdck ! ;
 : CLKHI			&sdck @ IOSET SIO! ;
 : CLKLO			&sdck @ IOCLR SIO! ;
 \ : SPICLK	CLKHI CLKLO ;
-: SPICLK		&sdck @ DUP IOSET SIO! movs r0 r0 IOCLR SIO! ;
+: SPICLK		&sdck @ DUP IOSET SIO! 0 + IOCLR SIO! ;
 \ : SPICLKS	0 DO SPICLK LOOP ;
 \ : SPICLKS	SDCK SWAP 0 DO DUP HIGH DUP LOW LOOP DROP ;
 \ : SPICLKS	SDDI high &sdck @ SWAP 2* 0 DO DUP I 1 AND IF IOSET ELSE IOCLR THEN SIO! LOOP DROP ;
 \ : SPICLKS	&sdck @ SWAP 0 DO DUP IOSET SIO! DUP IOCLR SIO! LOOP DROP ;
-: SPICLKS		&sdck @ SWAP 0 DO DUP IOSET SIO! movs r0 r0 DUP IOCLR SIO! LOOP DROP ;
+: SPICLKS		&sdck @ SWAP 0 DO DUP IOSET SIO! 0 + DUP IOCLR SIO! LOOP DROP ;
 ( aabbccdd -- bbccddaa ) --- write ms byte to SPI bus and rotate result
 : SPIWR ( n -- n )	8 0 DO ROL DUP SDDI PIN! SPICLK LOOP ;
 
@@ -1475,7 +1472,7 @@ pub SDPINS ( csdodick -- ) ~sdpins ! SDCK bit &sdck ! ;
 : SPIRD ( input -- output )
 	SDDI HIGH &sdck @ SWAP
 	8 0 DO 2* SDDO PIN@ OR
-	OVER IOSET SIO! movs r0 r0 OVER IOCLR SIO! \ SPICLK
+	OVER IOSET SIO! 0 + OVER IOCLR SIO! \ SPICLK
 	LOOP NIP
 	;
 {
@@ -1980,9 +1977,7 @@ pub FSIZE@	fsize @ ;
 
 --- fstack to allow for nesting includes in a FLOAD
 16 longs fstack		--- fname(12) fread(4)
-pri !FPOP
-    fstack 64 ERASE
-;
+pri !FPOP    	fstack 64 ERASE ;
 
 
 
@@ -2437,7 +2432,6 @@ pri FPOP?
     fstack FOPEN$   fstack 12 + @ _fread !
     fstack 16 + fstack 48 MOVE
     fstack 48 + 16 ERASE ;
-
 
 
 pub FKEY			FGET DUP 0= IF FPOP? 0= IF !SERKEY THEN THEN ;
@@ -3106,4 +3100,6 @@ NOTES:	Mecrisp uses $2003FE00 onwards for Flash variables
 compiletoram
 *END*
 ( use 1 SAVE# before loading to save a copy of the Mecrisp kernel )
+( Default INIT is PICO else add i.e  C2F : INIT MAKERPICO ; C2R SAVE )
 ( Use 2 SAVE# if you want a clean copy of Mecrisp+Tachyon )
+
