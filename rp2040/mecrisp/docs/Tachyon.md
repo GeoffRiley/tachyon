@@ -572,7 +572,7 @@ green! | func | ( — ) | set the neopixel to green
 
 word | type  | stack | comment
 ---  | :---: | :---: | ---
-~uart | var  | | ← 0
+~uart | var  | | ← 0; base for UART accesses
 UART0 | func | ( — ) | *~uart* ← $40034000; select the first UART
 UART1 | func | ( — ) | *~uart* ← $40048000; select the second UART
 UART | func  | ( n — addr ) | for a given uart register, *n*, return the appropriate access address, *addr*
@@ -587,3 +587,54 @@ BAUD | func  | ( baud — ) | set the current UART to the required *baud*rate
 CONBAUD | func | ( baud — ) | set the console baudrate
 RX   | func  | ( — c ) | receive a character, *c*, from the active UART
 TX   | func  | ( c — ) | senc a character, *c*, to the active UART
+
+- Experimental Interactive PIO register methods — WIP
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+~pio | var   | | ← 0; base for PIO accesses
+PIO0 | func  | ( — ) | *~pio* ← $50200000; select the first PIO
+PIO1 | func  | ( — ) | *~pio* ← $50300000; select the second PIO
+@PIO | func  | ( n — addr ) | for a given pio register, *n*, return the appropriate access address, *addr*
+sm   | var   | | ← 0; pio state machine in use
+ch   | var   | | ← 0; pio channel in use
+SM0  | func  | ( — ) | select the first state machine
+SM1  | func  | ( — ) | select the second state machine
+SM2  | func  | ( — ) | select the third state machine
+SM3  | func  | ( — ) | select the forth state machine
+@SM  | func  | ( n — addr ) | for a given state machine register, *n*, return the appropriate access address, *addr*
+FCTRL | func | ( — addr ) | return the *addr* for the FCTRL register
+FSTAT | func | ( — addr ) | return the *addr* for the FSTAT register
+FDEBUG | func | ( — addr ) | return the *addr* for the FDEBUG register
+FLEVEL | func | ( — addr ) | return the *addr* for the FLEVEL register
+TXFIFO | func | ( — addr ) | return the *addr* for the TXFIFO register for the current state machine
+RXFIFO | func | ( — addr ) | return the *addr* for the RXFIFO register for the current state machine
+IRQ  | func  | ( — addr ) | return the *addr* for the IRQ register
+IRQ_FORCE | func | ( — addr ) | return the *addr* for the IRQ_FORCE register
+INSYN | func | ( — addr ) | return the *addr* for the INPUT_SYNC_BYPASS register
+DBG_PADOUT | func | ( — addr ) | return the *addr* for the DBG_PADOUT register
+DBG_PADOE | func | ( — addr ) | return the *addr* for the DBG_PADOE register
+DBG_CFGINFO | func | ( — addr ) | return the *addr* for the DBG_CFGINFO register
+PIOMEM | func | ( n — addr ) | return the *addr* for PIOMEM register *n*; 32 registers
+CLKDIV | func | ( — addr ) | return the *addr* for statemachine register CLKDIV
+EXECCTRL | func | ( — addr ) | return the *addr* for statemachine register EXECCTRL
+SHIFTCTRL | func | ( — addr ) | return the *addr* for statemachine register SHIFTCTRL
+ADDR | func  | ( — addr ) | return the *addr* for statemachine register ADDR
+INSTR | func | ( — addr ) | return the *addr* for statemachine register INSTR
+PINCTRL | func | ( — addr ) | return the *addr* for statemachine register PINCTRL
+INTR | func  | ( — addr ) | return the *addr* for the INTR register
+IRQE0 | func | ( — addr ) | return the *addr* for the IRQE0 register
+IRQF0 | func | ( — addr ) | return the *addr* for the IRQF0 register
+IRQS0 | func | ( — addr ) | return the *addr* for the IRQS0 register
+
+- HC-SR04 PIN Sensor
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+PING | func  | ( echo trig — mm ) | trigger a ping and return with a result in millimeters
+
+- Grove Ultrasonic Ranger
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+RANGER | func | ( pin — mm ) | perform a measurement and return the result in millimeters
