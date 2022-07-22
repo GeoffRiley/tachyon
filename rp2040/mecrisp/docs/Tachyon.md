@@ -638,3 +638,128 @@ PING | func  | ( echo trig — mm ) | trigger a ping and return with a result in
 word | type  | stack | comment
 ---  | :---: | :---: | ---
 RANGER | func | ( pin — mm ) | perform a measurement and return the result in millimeters
+
+- Analog Inputs + Temperature + Voltage
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+ADC  | func  | ( n — addr ) | for given register *n* return the *addr* for access
+ADC-CS | func | ( — addr ) | return the *addr* for the ADC Control and Status register
+ADC-RES | func | ( — addr ) | return the *addr* for the RESult of the most recent ADC conversion
+ADC-FCS | func | ( — addr ) | return the *addr* for the FIFO Control and Status register
+ADC-FIFO | func | ( — addr ) | return the *addr* for the conversion result FIFO
+ADC-DIV | func | ( — addr ) | return the *addr* for the clock DIVider register
+ADC-INTR | func | ( — addr ) | return the *addr* for the raw INTeRrupts register
+ADC-INTE | func | ( — addr ) | return the *addr* for the INTerrupt Enable register
+ADC-INTF | func | ( — addr ) | return the *addr* for the INTerrupt Force register
+ADC-INTS | func | ( — addr ) | return the *addr* fot the INTerrupt Status after masking and forcing register
+ADC@ | func  | ( n — val ) | for ADC channel number *n* perform a reading and return it as *val*
+
+There are five channels for the ADC.
+channel | connetion
+--- | ---
+0   | GP26
+1   | GP27
+2   | GP28
+3   | (internal connection) GP29 for VSYS
+4   | (internal connection) temperature sensor
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+vref | var   | | ← 3260000; voltage reference value for converting ADC reading into microvolts
+\>uV  | func  | ( val — microvolt ) | convert ADC *val* to *microvolt*s based upon *vref*
+\>mV  | func  | ( val — millivolt ) | convert ADC *val* to *millivolt*s based upon *vref*
+.V   | func  | ( millivolt — ) | output *millivolt* value as a three decimal place voltage with a trailing "V"
+.VSYS | func | ( — ) | output the VSYS as a three decimal place voltage with a trailing "V"
+\>TEMP | func | ( val — temp ) | convert the ADC *val* to *temp* in degrees celcius
+TEMP@ | func | ( — temp ) | read the ADC and return the *temp* in degrees celcius
+.TEMP | func | ( — ) | output the temperature from the internal sensor in degrees celcius with a trailing "'C"
+.ADCS | func | ( — ) | output the voltages on all the channels in millivolts
+!ADC  | func | ( — ) | reset the ADC
+
+- LED flasher
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+FLASHES | func | ( n led — ) | given an LED on pin *led*, flash it *n* times with an on/off period of 100ms
+
+- SD Card SPI Drivers
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+~sdpins | var | | ← 0; four bytes defining the SD card SPI interface, order of bytes $(CS)(DO)(DI)(CK)
+&sdck | var  | | ← 0; bit mask for the GPIO pin assigned to the SPI clock signal
+SDCK | pub   | ( — pin ) | return the GPIO *pin* assigned to the SPI clock signal
+SDDI | pub   | ( — pin ) | return the GPIO *pin* assigned to the SPI data in signal
+SDDO | pub   | ( — pin ) | return the GPIO *pin* assigned to the SPI data out signal
+SDCS | pub   | ( — pin ) | return the GPIO *pin* assigned to the SPI chip select signal
+SDPINS | pub | ( csdodick — ) | assign the four pin values ready for using the SD SPI interface
+CLKHI | func | ( — ) | set the SPI clock signal pin high
+CLKLO | func | ( — ) | set the SPI clock signal pin low
+SPICLK | func | ( — ) | cycle the SPI clock signal pin to high and then to low
+SPICLKS | func | ( n — ) | perform *n* high to low clock cycles
+SPIWR | func | ( n1 — n2 ) | send the highest 8 bits of *n1* to the SPI DI pin in turn, performing a clock cycle between each, and return *n2* which is *n1* rotated left 8 times
+SPIWB | func | ( c — ) | send the 8 bit byte *c* to the SPI interface
+SPIWC | func | ( cmd — ) | send *cmd* formatted as a command to the SPI interface
+SPIWL | func | ( u — ) | send the 32 bit long *u* to the SPI interface
+SPIRD | func | ( n1 — n2 ) | read 8 bits of data from the SPI DO pin, performing clock cycles between each bit, and shift into the lowest bits of *n1*; *n2* is returned with the upper bits of *n1* discarded
+SPIRL | func | ( — u ) | receive a 32 bit long *u* from  the SPI interface
+SPIRX | func | ( dst c — ) | receive a set of *c* longs and store them in the buffer at *dst*
+SPITX | func | ( src c — ) | send a set of *c* longs from the buffer at *src*
+SDCLK | func | ( — ) | send a set of 8 SPI clock signals
+SDCLKS | func | ( n — ) | send *n* sets of 8 SPI clock signals
+
+- SD structure allocations
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+|    | org   | ( 0 — ) | update data space pointer to 0
+SDBUF | bytes | | 1024 bytes; buffer for SD card reading and writing
+DIRBUF | bytes | | 128 bytes; buffer for SD card FAT directory
+sdvars | bytes | | marker, no allocation, start of variables array
+ocr  | longs | | 1 long; operating conditions registers
+cid  | bytes | | 16 bytes; card ID
+csd  | bytes | | 16 bytes; card specific data
+sdsize | longs | | 1 long; number of sectors
+@sdrd | longs | | 1 long; 
+@sdwr | longs | | 1 long; 
+sdsum | longs | | 1 long; checksum of sector contents
+seccrc | longs | | 1 long; sector crc
+readsect | longs | | 1 long; current buffered sector
+filesect | longs | | 1 long; starting sector of current file (or directory)
+opensect | longs | | 1 long; starting sector of open file (or directory)
+_fread | longs | | 1 long;
+_fwrite | longs | | 1 long;
+mntd | longs | | 1 longl serial number of mounted device
+_fkey | bytes | | 2 bytes;
+_sdcmd | bytes | | 1 byte;
+_sdres | bytes | | 1 byte;
+wrflag | bytes | | 1 byte; true if sector has been modified
+wrens | bytes | | 1 byte; write enable
+file# | bytes | | 1 byte;
+fq   | bytes  | | 1 byte; listing counter
+sdhc | bytes  | | 1 byte;
+blklen | bytes | | 1 byte;
+bitbuf | bytes | | 16 bytes;
+
+- Partiton records
+
+Four primary partitions followed by a signature ($AA55 little endian stored).
+
+partition element | size (in bytes) | Description
+--- | --- | ---
+State | 1 | Status or physical drive number, historially $80 for a bootable drive
+First Head | 1 | CHS address of first absolute sector, described by head number (8 bits)
+First Sector and Cylinder | 1 | Sector number in bits 5–0; [cylinder bits 9–8] are in bits 7–6
+First Cylinder | 1 | remaining 8 bits for cylinder combined with previous bits
+Type | 1 | Partition type
+Last Head | 1 | CHS address of last absolute sector, describe by head number (8 bits)
+Last Sector and Cylinder | 1 | Sector number in bits 5–0; [cylinder bits 9–8] are in bits 7–6
+Last Cyclinder | 1 | remaining 8 bits for cylinder combined with previous bits
+First Sector | 4 | LBA address of first absoute sector in partition (little endian)
+Partition sector count | 4 | total count of sectors in partition (little endian)
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+parts | longs | | 16 longs; partition entry, as above
+parsig | bytes | | 2 bytes; partition signature: should bd $AA55
