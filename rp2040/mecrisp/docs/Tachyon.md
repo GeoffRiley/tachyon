@@ -776,3 +776,59 @@ word | type  | stack | comment
 ---  | :---: | :---: | ---
 parts | longs | | 16 longs; partition entry, as above
 parsig | bytes | | 2 bytes; partition signature: should bd $AA55
+
+- FAT32 Boot Record
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+fat32 | long | | no space alocated; defines the start of a fat32 record
+|    | res   | | 3 bytes; x86 code "JMP \<code-start\>" "NOP"
+oemname | bytes | | 8 bytes; string of formatting OS, eg "MSWIN4.1" or "MSDOS5.0"
+b/s  | bytes | | 2 bytes; ← $0200; number of bytes per sector (=512)
+s/c  | bytes | | 1 byte; ← $40; number of sectors per cluster (≡32Kb)
+rsvd | bytes | | 2 bytes; ← $20; number of reserved sectors from the boot record until the first FAT record
+fats | bytes | | 1 byte; ← $02; number of copies of the FAT
+|    | res   | | 2 bytes; maximum root directory entries (non-FAT32)
+|    | res   | | 2 bytes; number of sectors in partition smaller than 32Mb (non-FAT32)
+media | bytes | | 1 byte; ← $F8; hard disk flag (IBM defined as %11111red, where *r* is removable, *e* is eight sectors/track, and *d* is double sided)
+|    | res   | | 2 bytes; sectors per FAT in older systems (non-FAT32)
+|    | res   | | 2 bytes; sectors per track in older systems (non-FAT32)
+|    | res   | | 2 bytes; number of heads (non-FAT32)
+hidden | bytes | | 4 bytes; ← $00002000; number of hidden sectors before partition
+s/p  | bytes | | 4 bytes; ← $00ECC000; number of sectors * bytes/sector → capacity
+s/f  | bytes | | 4 bytes; ← $00000766; number of sectors per FAT record
+fat? | bytes | | 2 bytes; ← $0000; fat flags (b3…0 = active FAT copy, b7 = mirroring)
+fatver | res | | 2 bytes; ← $0000; fat version *major*.*minor*
+rootcl | bytes | | 4 bytes; ← $00000002; cluster number of the start of the root directory
+infosect | bytes | | 2 bytes; ← $0001; info = sector number of the filesystem information sector (from partition start)
+bbsect | bytes | | 2 bytes; ← $0006; boot = sector number of the backup boot sector (from partition start)
+|    | res   | | 12 bytes; ← 0
+ldn  | bytes | | 1 byte; ← $80; logical drive number of partition
+ldnh | res   | | 1 byte; ← $01; unused or high byte of *ldn*
+extsig | bytes | | 1 byte; ← $29; extended signature
+serial | bytes | | 4 bytes; ← $63FEC331; serial number of partition
+volname | bytes | | 11 bytes; volume name
+fatname | res | | 8 bytes; ← "FAT32   " _should always be FAT32 but don't rely on it_
+|    | res   | | 2 bytes; alignment bytes to end block on a long boundary
+
+Total size of FAT record recorded above = $5C (92 decimal) bytes.
+
+After the *fatname* there are 420 bytes available for x86 executable code (target of the jump in the first entry); finally at offset $01FE there is the boot record signature ($AA55—little endien)
+
+* FAT disk image reading status storage
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+freeclusters | longs | | 1 long; read from info sector
+lastcluster | longs | | 1 long; read from info sector
+usedcl | longs | | 1 long; used clusters: calculated during scan at mount
+freecl | longs | | 1 long; free clusters: calculated during scan at mount
+used% | longs | | 1 long; percentage used (as whole decimal): calculated during scan at mount
+mksiz | longs | | 1 long; ← 0; size used to create a file if file not found, 0 ≡ none
+rootdir | longs | | 1 long; sector address of root directory
+cwdir | longs | | 1 long; sector address of current working directory (?)
+_fat1 | longs | | 1 long; sector address of the first FAT copy
+_fat2 | longs | | 1 long; sector address of the second FAT copy
+cwdsect | longs | | 1 long; sector address of the current working sector (?)
+sdsz | const | | ← *sdvars* - *org@*; the size of the array used to hold all raw SD card related values + FAT etc.
+cwd$ | bytes | | 14 bytes; name of current working directory
