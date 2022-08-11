@@ -6,7 +6,7 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2207131000 constant tme
+2208081230 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
@@ -101,6 +101,27 @@ pub FAULT		PRINT"    !address fault! " .RSTACK  RESET ;
 pub !FAULT		['] FAULT irq-fault ! ;
 !FAULT
 
+
+
+	( data space variables - unitialized )
+
+$20030000 constant DATA			\ base for all data and buffers
+0 variable @org				\ data space pointer
+
+\ 0 variable @org	`			\ data space pointer
+--- org uses a relative offset from DATA (or absolute - DATA )
+pub org				DUP DATA >= IF DATA - THEN @org ! ;
+pub org@			@org @ DATA + ;
+( reserve bytes but do not assign a name )
+pre res				@org +! ['] \ execute ;
+pri (bytes)			org@ ['] constant execute @org +! ;
+pre bytes			(bytes) ;
+pre byte			1 (bytes) ;
+pub alorg			1- @org @ OVER + SWAP NOT AND org ;
+pri (longs)			4 alorg 2* 2* (bytes) ;
+pre longs			(longs) ;
+pre long			1 (longs) ;
+
 	( hook control )
 
 pub QUIT!		hook-quit ! ;
@@ -108,11 +129,35 @@ pub QUIT: 		' QUIT! QUIT ;
 
 pub EMIT!		hook-emit ! ;
 pub KEYS! ( key key? -- ) ?DUP IF hook-key? ! THEN ?DUP IF hook-key ! THEN ;
-pub !SERKEY		['] serial-key ['] serial-key? KEYS! ;
+
+1 bytes skwr
+1 bytes skrd
+2 bytes skcr
+{
+256 bytes skbuf
+pub SKKEY?
+    BEGIN serial-key? WHILE serial-key skwr C@ skbuf + C! 1 skwr C+! REPEAT
+    skwr C@ skrd C@ - $FF AND ;
+pub SKKEY
+    BEGIN skrd C@ skwr C@ = WHILE SKKEY? DROP REPEAT
+    skbuf skrd C@ + C@ 1 skrd C+! ;
+
+pub SERKEY		skcr C@ IF SKKEY ELSE serial-key THEN ;
+pub SERKEY?		skcr C@ IF SKKEY? ELSE serial-key? THEN ;
+}
+
+\ pub !SERKEY		['] serial-key ['] serial-key? KEYS! ;
+pub SERKEY		serial-key ;
+pub SERKEY?		serial-key? ;
+
+pub !SERKEY		['] SERKEY ['] SERKEY? KEYS! 0 skwr ! ;
+
+
 pub CONOUT		['] serial-emit EMIT! ;
 pub CON			CONOUT !SERKEY ;
 pub CON?		hook-emit @ ['] serial-emit = ;
-pub SERIAL?		hook-key @ ['] serial-key = ;
+pub SERIAL?		hook-key @ DUP ['] SERKEY = SWAP ['] serial-key = OR ;
+
 
 ' serial-emit variable save-emit
 --- muted output
@@ -208,7 +253,6 @@ pub TAB		9 EMIT ;
 pub TABS		9 SWAP EMITS ;
 pub INDENT	CR TABS ;
 
-0 variable @org				\ data space pointer
 0 variable ~m
 0 variable ~o
 --- place mecrisp into block load mode via TACHYON QUIT
@@ -231,15 +275,30 @@ pub CTRL! ( cfa n -- )  	$1F AND ctrls ! ;
 
 0 variable ~k
 \ re-execute last entry
-pri REX		~k C@ rp@ 16 + ! ;
+pri REX		~k C@ RP@ 16 + ! ;
+' REX		^ X CTRL!
+{
+pri REX		RP@ SDBUF $20 MOVE SDBUF $20 DUMPL TIB $10 DUMP ~k C@ rp@ 16 + ! ;
+' REX		^ X CTRL!
+
+pri .R		RP@ $20 - SDBUF $40 MOVE SDBUF $40 DUMPL  ;
+' .R		^ X CTRL!
+
+
+
+pub .RSTACK
+    CRLF PRINT" RETURN STACK: " HEX
+    RP@ 32 OVER + SWAP DO I @ . SPACE 4 +LOOP CRLF
+;
+
+}
 
 \ discard and reset the CLI
 pri DISCARD	2DUP $20 FILL $0D EMIT $2D 80 EMITS ;
+' DISCARD 	$1B CTRL!
 
 \ setup some control keys so far
 ' RESET 	^ C CTRL!
-' REX		^ X CTRL!
-' DISCARD 	$1B CTRL!
 
 
 \ create a background polling method while waiting for input
@@ -260,13 +319,12 @@ pub +POLL ( cfa -- )
 pub QKEY
     BEGIN
 --- while waiting for input also handle any polls
-    BEGIN serial-key? 0= WHILE POLLS REPEAT
+    BEGIN SERKEY? 0= WHILE POLLS REPEAT
 --- process control keys internally and either execute or pass if no action set
-    serial-key DUP $20 <
-    WHILE DUP ctrls @ 0EXIT   ctrls @ EXECUTE
+    SERKEY DUP $20 <
+    WHILE DUP ctrls @ 0EXIT  ctrls @ EXECUTE $0D EXIT
     REPEAT
 ;
-
 {
 --- SERIAL KEY INPUT that also POLLS when idle and execute control keys
 pub QKEY
@@ -278,7 +336,7 @@ pub QKEY
 ;
 }
 --- Init QKEY in place of standard key (used during QUERY)
-pri !QKEY	['] QKEY ['] serial-key? KEYS! ;
+pri !QKEY	['] QKEY ['] SERKEY? KEYS! ;
 
 0 variable ~defers  ( note: just a single deferred execution vector for now)
 0 variable ~depth
@@ -315,28 +373,28 @@ pub respond	PRINT" --- " ;
 		( USER PROMPT )
 
 pub TACHYON ( -- )
-  $BF00 ['] QUIT 4 + H!				\ DISABLE STACK RESET
-  !FAULT					\ Simple report and reset handler
+  $BF00 ['] QUIT 4 + H!			\ DISABLE STACK RESET
+  !FAULT						\ Simple report and reset handler
   (latest) @ ~p !				\ dictionary match register
   begin
-    depth 0< IF !SP THEN			\ correct underflow
-    ~m @					\ user or source mode?
+    depth 0< IF !SP THEN		\ correct underflow
+    ~m @						\ user or source mode?
     IF
       MUTED QUERY 	 			\ don't echo input
-      UNMUTED ?REPORT				\ but report new defs
-      SPACE INTERPRET				\ and interpret/compile
-    ELSE					\ else console mode
+      UNMUTED ?REPORT			\ but report new defs
+      SPACE INTERPRET			\ and interpret/compile
+    ELSE						\ else console mode
       prompt
-      hook-key @ ['] serial-key =		\ fix console to handle controls
+      SERIAL?					\ fix console to handle controls
       IF
         !QKEY					\ Use control key manager
         ~query @ execute respond		\ get input and --- separate from response
         !SERKEY					\ switch back to standard key input
       ELSE
-	~query @ execute respond		\ get input and --- separate from response
+	    ~query @ execute respond \ get input and --- separate from response
       THEN
-      current-source @ ~k !			\ remember position for ^X re-execute
-      interpret					\ interpret/compile
+      current-source @ ~k !		\ remember position for ^X re-execute
+      INTERPRET					\ interpret/compile
       defers					\ defered actions are executed afterwards
     THEN
   again
@@ -346,6 +404,30 @@ pub TACHYON ( -- )
 MECRISP
 QUIT: TACHYON
 
+{
+
+
+: COMPEX ( -- ) CR
+  BEGIN
+    QUERY HERE washere ! last waslast !
+
+
+    intbuf -1 BLOCK 120 CMOVE
+    HERE BDICEND !            \ Backup HERE
+    LAST BLSTWAD !            \ Backup LAST
+    HERE $1000 + DICEND !     \ Point to compile scratch space
+    :NONAME                   \ Switch to anonymous compilation
+    >IN @ >R   BLK @ >R       \ Backup >IN, BLK
+    -1 BLK !   0 >IN !
+    INTERPRET
+    ['] ; EXECUTE             \ End anonymous compilation
+    BDICEND @ DICEND !        \ Restore HERE
+    R> BLK !   R> >IN !       \ Restore BLK, >IN
+    EXECUTE                   \ Run the xt returned by :NONAME
+    ."  :ok" CR
+  AGAIN ;
+}
+
 
 
 
@@ -353,24 +435,6 @@ QUIT: TACHYON
 
 ( ************************************************************************ )
 
-
-	( data space variables - unitialized )
-
-$20030000 constant DATA			\ base for all data and buffers
-
-\ 0 variable @org	`			\ data space pointer
---- org uses a relative offset from DATA (or absolute - DATA )
-pub org				DUP DATA >= IF DATA - THEN @org ! ;
-pub org@				@org @ DATA + ;
-( reserve bytes but do not assign a name )
-pre res				@org +! ['] \ execute ;
-pri (bytes)			org@ ['] constant execute @org +! ;
-pre bytes			(bytes) ;
-pre byte			1 (bytes) ;
-pub alorg				1- @org @ OVER + SWAP NOT AND org ;
-pri (longs)			4 alorg 2* 2* (bytes) ;
-pre longs			(longs) ;
-pre long			1 (longs) ;
 
 
 	( some Tachyon like utility words )
@@ -412,10 +476,15 @@ pub C++				1 SWAP C+! ;
 --- increment B (TOS+1)
 pub B++ ( b a -- b+1 a )	SWAP 1+ SWAP ;
 
+
 pub C@++ ( adr -- adr+1 n )	DUP 1+ SWAP C@ ;
 
 pub 3RD				2 PICK ;
 pub 4TH				3 PICK ;
+\ need to change header flags for these to work when embedded
+\ pub 3RD 		0 ; $68BE ' 3RD 4 + H!
+\ pub 4TH 		0 ; $68FE ' 4TH 4 + H!
+
 
 pub ERASE			0 FILL ;
 
@@ -608,8 +677,32 @@ pub UTF8 ( code -- )        	$E2 EMIT DUP 6 >> $80 + EMIT $3F AND $80 + EMIT  ;
 pub EMOJI ( ch -- )		$F0 EMIT $9F EMIT DUP 6 >> $98 + EMIT $3F AND $80 + EMIT ;
 
 
+--- read a CSI sequence and abbreviate to 32-bits
+pub CSIKEY ( --- code )
+    KEY DUP $1B =
+    IF  cycles SWAP
+      BEGIN KEY?
+---                ignore ;      else merge to code       update timeout
+        IF KEY DUP ` ; = IF DROP ELSE SWAP 8 << OR THEN   NIP cycles SWAP THEN
+---     timeout after 3ms of inactivity - must be end of sequence
+        OVER cycles - ABS 5000 >
+      UNTIL NIP
+    THEN ;
 
+{
 
+pub CSIKEY ( --- code )
+    !SP KEY DUP $1B =
+    IF  cycles
+      BEGIN KEY?
+---                ignore ;      else merge to code       update timeout
+        IF KEY DROP  cycles - ABS cycles THEN
+---     timeout after inactivity - must be end of sequence
+        DUP cycles - ABS 5000 >
+      UNTIL
+    THEN DROP .S ;
+
+}
 
 	( *** PRINT HEX & BINARY *** )
 
@@ -782,7 +875,7 @@ or <count> nwords
 }
 \ link(4) atr?(2) CNT NAME
 0 variable ~n
-80 variable tw		--- default terminal width
+80 variable ~tw		--- default terminal width
 
 pub HIGHLIGHT
     plain
@@ -809,7 +902,7 @@ pub nwords ( max -- )
 	  IF
 	    DUP 6 + DUP 1+ SWAP C@ ( dict name cnt )
 	\ wrap before it prints over 80 columns
-	    DUP 1+ ~n +! ~n @ tw C@ > IF CRLF DUP 1+ ~n ! THEN
+	    DUP 1+ ~n +! ~n @ ~tw C@ > IF CRLF DUP 1+ ~n ! THEN
 	    TYPE SPACE plain
 	  THEN
 \	  THEN
@@ -817,7 +910,7 @@ pub nwords ( max -- )
 
 	REPEAT 2DROP
 ;
-pub qw		20 nwords ;
+pub qw		16 nwords ;
 pub words	-1 nwords ;
 
 
@@ -906,10 +999,9 @@ $02C constant OEXOR
 
 	( GPIO )
 --- GPIO STATUS
-: GPSR ( pin -- )	3 << $40014000 + ;
+: GPSR ( pin -- )		3 << $40014000 + ;
 --- GPIO CONTROL
-: GPCR ( pin -- )	3 << $40014004 + ;
-
+: GPCR ( pin -- )		3 << $40014004 + ;
 
 : MASK! ( flg adr mask -- )	 ROT IF OVER @ OR ELSE OVER @ SWAP BIC THEN SWAP ! ;
 
@@ -938,7 +1030,7 @@ peripherals
 : PADS3V3 			0 PADS0 ! ;
 
 \ $4001c000 constant PADS0
-: @PAD ( pin -- adr )		1+ 2* 2* PADS0 + ;
+: @PAD ( pin -- adr )		1+ 2 << PADS0 + ;
 : PAD@ ( pin -- val )		@PAD @ ;
 : PAD! ( val pin -- )		@PAD ! ;
 
@@ -1256,17 +1348,21 @@ pub BAUD ( baud -- )
 
 --- change console baud rate
 pub CONBAUD	UART0 BAUD ;
-{
-$669E, $66A2
-921600	$08 $1C
 
-}
+--- init current UART (usage: UART1 16 17 115200 !UART )
+pub !UART ( rxpin txpin baud -- )  BAUD DUP PU #UART DUP PU #UART ;
+
 
 --- simple receive routine using select channel
 : RX ( -- ch )	BEGIN UFR @ $10 AND 0= UNTIL UDR @ ;
 : TX ( ch -- )	BEGIN UFR @ $20 AND 0= UNTIL UDR ! ;
 
+pri UFR1? ( m -- f )	$40038018 @ AND 0= ;
+pub RX1? ( -- f )	$10 UFR1? ;
+pub RX1 ( -- ch )	BEGIN RX1? UNTIL $40038000 @ ;
+pub TX1 ( ch -- )	BEGIN $20 UFR1? UNTIL $40038000 ! ;
 
+pub COM1	' TX1 EMIT! ' RX1 ' RX1? KEYS! ;
 
 	( EXPERIMENTAL INTERACTIVE  PIO REGISTER METHODS - WIP )
 
@@ -1432,7 +1528,7 @@ pub SDDI	~sdpins 1+ C@ ;
 pub SDDO	~sdpins 2+ C@ ;
 pub SDCS	~sdpins 3 + C@ ;
 
-pub SDPINS ( csdodick -- ) ~sdpins ! SDCK bit &sdck ! ;
+pub SDPINS ( cs:sdo:sdi:sck -- ) ~sdpins ! SDCS HIGH SDCK LOW SDDI LOW  SDCK bit &sdck ! ;
 
 \ : SPICLK	SDCK HIGH SDCK LOW ;
 
@@ -1446,14 +1542,28 @@ pub SDPINS ( csdodick -- ) ~sdpins ! SDCK bit &sdck ! ;
 \ : SPICLKS	SDDI high &sdck @ SWAP 2* 0 DO DUP I 1 AND IF IOSET ELSE IOCLR THEN SIO! LOOP DROP ;
 \ : SPICLKS	&sdck @ SWAP 0 DO DUP IOSET SIO! DUP IOCLR SIO! LOOP DROP ;
 : SPICLKS		&sdck @ SWAP 0 DO DUP IOSET SIO! 0 + DUP IOCLR SIO! LOOP DROP ;
-( aabbccdd -- bbccddaa ) --- write ms byte to SPI bus and rotate result
-: SPIWR ( n -- n )	8 0 DO ROL DUP SDDI PIN! SPICLK LOOP ;
+( aabbccdd -- bbccddaa ) --- write msb to SPI bus and rotate result
+\ : SPIWR 	SDDI bit SWAP 8 0 DO ROL DUP 1 AND IF OVER IOSET SIO! ELSE OVER IOCLR SIO! THEN &sdck @ DUP IOSET SIO! 0 + IOCLR SIO! LOOP NIP ;
+\ optimized for wider clock pulses and 3MHz clock rate.
+: SPIWR
+    SDDI bit SDCK bit ROT
+    8 0 DO ROL OVER IOCLR SIO! DUP 1 AND IF 2 PICK IOSET SIO! ELSE 2 PICK IOCLR SIO! THEN
+    OVER IOSET SIO! LOOP SWAP IOCLR SIO! NIP ;
+{
+$07060504 SDPINS
+pub 3RD 		$FF ; $68BE ' 3RD 4 + H!  0 ' 3RD 6 - H!
+pub 4TH 		$FF ; $68FE ' 4TH 4 + H!  0 ' 4TH 6 - H!
+: SPIWR
+	SDCK bit SDDI bit ROT
+	8 0 DO ROL DUP 1 AND ( ck di dat bit ) 4TH IOCLR SIO!  IF OVER IOSET SIO! ELSE OVER IOCLR SIO! THEN
+	( ck di dat ) 3RD IOSET SIO! LOOP
+	NIP SWAP IOCLR SIO! ;
 
-\ : SPIWR ( n -- n )	SDDI SWAP 8 0 DO ROL OVER PIN! SPICLK LOOP NIP ;
 
+: SPIWB			24 << SPIWR DROP ;
 
-\ : SPIWR		8 0 DO ROL DUP SDDI PIN! SPICLK LOOP ;
-\ : SPIWR		8 0 DO ROL DUP 1 AND IF SDDI HIGH ELSE SDDI LOW THEN SPICLK LOOP ;
+}
+
 ( byte -- ) --- write byte to SPI bus
 : SPIWB			24 << SPIWR DROP ;
 ( cmd -- ) --- format as SD command and write
@@ -1475,6 +1585,7 @@ pub SDPINS ( csdodick -- ) ~sdpins ! SDCK bit &sdck ! ;
 	OVER IOSET SIO! 0 + OVER IOCLR SIO! \ SPICLK
 	LOOP NIP
 	;
+: SPIRB ( -- byte )	0 SPIRD ;
 {
 : SPIRDS ( input -- output )
 	SDDI HIGH
@@ -1612,6 +1723,7 @@ transfer operations (refer to "SDIO Card Specification" for further details).
 
 
 : SDIO
+	~sdpins @ 0EXIT
     $CA SDDO PAD!
     $73 SDCK PAD!
     $7B SDDI PAD!
@@ -1635,10 +1747,11 @@ transfer operations (refer to "SDIO Card Specification" for further details).
 
 : CMD ( data cmd -- res )
     SDCS HIGH SDCS LOW
+--- keep cmd then 8 preclocks
     DUP _sdcmd C! SDCLK
-\   write cmd and 32-bits of data
+--- write cmd and 32-bits of data
     SPIWC SPIWL
-\  send a crc of CMD8 or CMD0 - others ignore value
+--- send a crc of CMD8 or CMD0 - others ignore value
     _sdcmd C@ IF $87 ELSE $95 THEN SPIWB
     SDRES
 ;
@@ -1744,16 +1857,17 @@ Device may use up to 74 clocks for preparation before receiving the first comman
 
 }
 pub !SD ( --- ocr|false )
+	SDIO SD? DUP 0EXIT DROP
 	readsect ~~
 	SDBUF $400 ERASE
 	4000 SDCLKS
-	SDIO SD? IF
+\	SDIO SD? IF
 	  10 SDCLKS 5 0 DO
 \	    attempt init and check if last operation was 9
 	    !SD! _sdcmd C@ 9 =  IF LEAVE ELSE 1024 SDCLKS THEN
 	  LOOP SDIO 100 SDCLKS
 	  69 48 CSD@ 1+ 10 <<  sdsize !
-	THEN
+\	THEN
 	$80FFFFF1 6 CMD 0= IF SDBUF 64 SDDAT! THEN
 	ocr @
 	;
@@ -2436,12 +2550,19 @@ pri FPOP? ( -- f )
 
 pub FKEY			FGET DUP 0= IF FPOP? 0= IF !SERKEY THEN THEN ;
 pub FKEY? 			@FILE DUP 0EXIT DROP FSIZE@ >= _fread @ ;
+{
+pub FLINE  ( dst -- )		BEGIN FKEY DUP $0D <> WHILE OVER C! 1+ REPEAT DROP ;
+pub FLINE ( dst -- )
+    BEGIN FKEY DUP 3RD C! b++ $0D = UNTIL
+    BEGIN 1- DUP C@ $20 > UNTIL 1+ $0D SWAP C!
+;
+}
 
 ( offset -- ) --- Load current file
 pub -FLOAD ( addr -- )		_fread ! ['] FKEY  ['] FKEY?  KEYS! ;
-pub FLOAD			!FPOP FOPEN 0 -FLOAD ;
+pub FLOAD					!FPOP FOPEN 0 -FLOAD ;
 --- load the current file and quit
-pub RELOAD			-FLOAD QUIT ;
+pub RELOAD ( addr -- )		-FLOAD QUIT ;
 
 pub #INCLUDE ( <name> -- )
     SERIAL? IF PRINT" INCLUDE " TOKEN TYPE
@@ -2748,10 +2869,15 @@ pub .DT				DATE@ 6 U.R $2D EMIT TIME@ 6 Z U.R ;
 
 pub .HMS ( n ch -- )		>R HMS 2 Z U.R R@ EMIT 2 Z U.R R> EMIT 2 Z U.R ;
 pub .DATE			DATE@ ." 20" $2F .HMS ;
-pub .DAY			DAY@ 3 * s" MONTUEWEDTHUFRISATSUN" DROP + 3 TYPE ;
+pub .DAY			DAY@ 3 * s" MonTueWedThuFriSatSun" DROP + 3 TYPE ;
 pub .TIME			TIME@ $3A .HMS ;
 pub .FDT			.DATE SPACE .DAY SPACE .TIME ;
-
+{
+pub .ADATE
+	.DAY SPACE @month C@ .ASMONTH
+	SPACE @date C@ $1F AND BCD>DEC ` , .PAR
+	SPACE @year C@ BCD>DEC 2000 + 4 Z U.R ;
+}
 pub !QTIME			TIME@ QTIME! ;
 \
 
@@ -2830,6 +2956,7 @@ pri !TACHYON
 	3 PICOLED FLASHES
 	bms ~
 	PRINT" VSYS = " .VSYS  PRINT"  @" .TEMP
+	!SERKEY
 ;
 
 
@@ -2866,8 +2993,8 @@ pub MAKERPI
 13 constant SDDAT1
 14 constant SDDAT2
 15
-16 constant ESP.8
-17 constant ESP.1
+16 constant ESP.8 RXD	<-- TXD
+17 constant ESP.1 TXD   --> RXD
 18 constant BUZZER
 18 constant LA
 19 constant RA
@@ -2890,6 +3017,7 @@ pub MAKERPICO
 \	$5A 13 PAD! $5A 14 PAD! 13 PU 14 PU
 	18 spkr C!
 	28 NEOPIN $200000 NEO!
+\	UART0 16 #UART 17 #UART 115200 BAUD
 	%11 S" MAKER PI PICO" PCB! ( b0 = Pico )
 	.PCB
 	CRLF !PICO BEEP
@@ -2923,6 +3051,18 @@ pub PICOVGA --- pimoroni PICO VGA DEMO
 	PLAIN
 ;
 
+--- SEEED STUDIO RP2040 WIO
+pub SSWIO
+	100 ms !TACHYON   \ 13 PU 14 PU
+	$0F0C0B0A SDPINS ( &15.12.11.10 )  ( <---- CHANGE TO SUIT )
+	spkr C~ 
+	%10 S" SEEED RP2040 WIO" PCB! ( b0 = Pico )
+	.PCB
+	CRLF !PICO BEEP
+	KEY? IF KEY $1B = IF PLAIN EXIT THEN THEN
+	.MOUNT
+	PLAIN
+;
 
 
 
@@ -2971,113 +3111,28 @@ source code other than this INIT, your INIT, or your INIT that calls this INIT
 
 }
 
-
-\ : INIT		MAKERPICO ;
+--- !!! DON'T MUCK UP THE SOURCE - KEEP IT CLEAN
+: INIT		MAKERPICO ;
 \ : INIT		MAKERPI ;
-
-: INIT			PICO ;
-
-
-
+\ : INIT			PICO ;
 {
 README: USER INITS
 For user specific inits just create a new INIT and
 call !TACHYON first up, then any specific inits
 
 OR SIMPLY ase a predefined INIT after loading the source:
-compiletoflash
-: INIT  MAKERPICO ;
-compiletoram
-SAVE
+C2F : INIT  MAKERPICO ; C2R SAVE
 
 
 
+: ED	s" FRED" DROP FOPEN$ IF 0 -FLOAD s" ED" EVALUATE THEN ;
+: Q s" FRED" DROP 10 DUMP ;
 }
-
 
 ' CLS ^ L CTRL!
 
-{
-README:
-Try to use my 921600bd UF2 Mecrisp mod
-and try not to change the source code either because all the pinouts
-are runtime configurable for all devices including SD card etc.
-save original clean kernel with 1 SAVE# - send/paste then type SAVE
-If you want to update an old version of this, type 1 LOAD# for original kernel then paste.
 
-!!! To customize try to keep all changes to INIT (Read the INIT header at the end )
-I have also isolated the Maker Pi Pico settings from INIT itself
-type MAKERPI to setup the board manually or make a new INIT in Flash.
-I am also including other board configurations such as Pico etc
-
-Linux systems can use ASCII-XFR along with the FL.FTH file for
-super fast 0 delay loads - less than 1.5sec for this file from go to whoa.
-I use this script in Linux which I name fl
-# transfer text file
-# usage: ./fl RP2040 0
-ascii-xfr -sn -l 5 Forth/FL.FTH > /dev/ttyUSB$2
-ascii-xfr -sn Forth/$1.FTH > /dev/ttyUSB$2
-
-CHANGELOG:
-
-220704	Fix weekday in RTC as 0 to 6
-220528	Add in checks for SD card and mounting for file ops
-	Added MLOAD - fast load can use this but so can FRED
-220522	Problem with MAKERPICO microSD setup - allowing for external adaptor as well
-	Add tests for PCF8563 (still needs to be tested)
-220518	Allow $! to handle counted strings automatically (facilitates s" use with FOPEN$)
-	org now compensates orgs in DATA range (during reloads org variables are used to reset org)
-220503	Modify ` to handle up to 4 characters  ` PUB .L --- 00505542
-	Add extended bit operations setb clrb togb bit?
-220501	Change CR to CR only - make CRLF standard
-	Add -FLOAD, FGET, FPUT
-
-220428	Add UTF8 and EMOJI
-220426	Added SDRDS
-	Added QTIME! which synchs the software time with an RTC or manually
-	Updated QTIME@
-220424	Used PWM hardware for tones
-	Add BIT and .DP
-220417	Updated PWM methods - now frequency does not change with duty
-	HZ and KHZ set an optimal frame cycle with a 50% duty
-	Added init for org using last data variable in this module (!!! make it search for the name)
-220415	add HH! and LH! for high and low word store
-	Update PWM words - some bugs  since using PIN
-220411	Remove pin parameter from PWM settings and use a general PIN to set first
-
-2204XX	Added ` instead of [CHAR] or CHAR for ASCII literals:  ` A .B --- 41
-	Added ^ for control characters: ^ A .B --- 01
-	Added IP# for IP notation: IP# 192.168.0.101 .L --- C0A80065
-220403  Added |< .BYTE etc
-	Added ` to replace [CHAR] and CHAR
-	Added Tachyon Mecrisp Extensions vesion time stamp "tme" (unsigned)
-211220	Added ESP module support for Maker Pi Pico
-211214
-211201	Standardize pin assignments and setup pcb specific handlers
-	- I2C bus on 2&3 may use I2C h/w in future
-	- User INIT can now simply call !TACHYON and then user inits
-
-211130	Fixed compile report to list new defintions during block load
-211129	Changed I2C SCL to pulse high then float to PU
-	I2C now waits for SCL high with 200us timeout (clock stretching)
-211126	Rename signed << and >> to <<< and >>>
-	recreate simple << and >>
-211124	Make SD configuration manual (inc MAKERPI )
-	SD? returns false if not configured
-211122	Added TIMEOUT words
-211119  Tweaked SD read speeds - loads bmp in half the time
-211118	Add lap timing to MECRISP *END* reports
-211117	Remove CON from TACHYON QUIT loop
-
-211113	Fixed neopixel timing
-	added revectorable query - later set to bold for user input
-	added .CTRLS linked to ^? to list control keys
-211111	Make RTC address user settable
-211110	Added I2C and RTC
-211024	Added polling via QKEY
-
-NOTES:	Mecrisp uses $2003FE00 onwards for Flash variables
-}
+compiletoram
 {
 +------------------------------------------------------------------------------------------------------------------------------+
 |                                                   TERMS OF USE: MIT License                                                  |
@@ -3096,10 +3151,8 @@ NOTES:	Mecrisp uses $2003FE00 onwards for Flash variables
 +------------------------------------------------------------------------------------------------------------------------------+
 }
 
-
-compiletoram
 *END*
 ( use 1 SAVE# before loading to save a copy of the Mecrisp kernel )
-( Default INIT is PICO else add i.e  C2F : INIT MAKERPICO ; C2R SAVE )
-( Use 2 SAVE# if you want a clean copy of Mecrisp+Tachyon )
+( Default INIT is MAKERPICO else add your own i.e  C2F : INIT PICO ; C2R SAVE )
+( Use 2 SAVE# if you want a clean copy of Mecrisp+Tachyon to reload )
 

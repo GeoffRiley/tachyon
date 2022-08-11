@@ -55,6 +55,23 @@ word | type  | stack | comment
 FAULT | pub  | | simple fault handler, resets the system rather than taking any remedial actions
 !FAULT | pub | | word to install *FAULT* in the *irq-fault* vector
 
+- Data space variables — uninitialised
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+DATA | const | | ← $20030000: base for all data and buffers
+@org | var   | | variable: data space base pointer
+org  | pub   | ( n — ) | *org* ← *n*: update data space pointer with the given value
+org@ | pub   | ( — addr ) | return the address pointed to by the data space pointer
+res  | pre   | ( n — ) | *org* ← *org* + *n*: reserve bytes in data space without assigning a name
+(bytes) | pri | ( n — ) | create a new constant of *n* bytes, updating *org* ← *org* + *n* afterwards
+bytes | pre  | ( n — ) | pre-emptive version of *(bytes)*: use *n* *bytes* *new_name*
+byte | pre   | ( — ) | allocate a single byte constant
+alorg | pub  | ( n — ) | align *@org* on a boundary appropriate to the given value *n*: *n* should be a power of 2
+(longs) | pri | ( n — ) | reserve space in the data space for *n* 32 bit long values
+longs | pre  | ( n — ) | pre-emptive version of *(longs)*
+long | pre   | ( — ) | allocate space for a single 32 bit long value
+
 - Hook control
 
 word | type  | stack | comment
@@ -63,11 +80,16 @@ QUIT! | pub  | ( f — ) | install function *f* in the *hook-quit* vector
 QUIT: | pub  | | defining word for new quit functions
 EMIT! | pub  | ( f — ) | install function *f* in the *hook-emit* vector
 KEYS! | pub   | ( key key? — ) | install function *key* in the *hook-key* vector; and *key?* in the *hook-key?* vector
+skwr | bytes | | 1 byte storage
+skrd | bytes | | 1 byte storage
+skcr | bytes | | 2 bytes storage
+SERKEY | pub | ( — c ) | wait for a character, *c*, from the serial port and returns it
+SERKEY? | pub | ( — f ) | checks if a character is available on the serial port and returns true or false in *f* to reflect the condition
 !SERKEY | pub | | set *hook-key* to *serial-key* and *hook-key?* to *serial-key?*: redirect stdin to the serial input
 CONOUT | pub | | set *hook_emit* to *serial-emit*: redirect stdout to the serial output
 CON  | pub   | | redirect stdin and stdout to the serial interface
 CON? | pub   | | check if console is being sent to serial port
-SERIAL? | pub | | check is input is being taken from the serial port
+SERIAL? | pub | | check if input is being taken from the serial port
 save-emit | var | | variable to save the value of *serial-emit*/*hook-emit* during muting
 MUTED | pub  | | save *hook-emit* in *save-emit*; set *hook-emit* to *DROP*
 UNMUTED | pub | | restore *hook_emit* from *save-emit*
@@ -104,7 +126,6 @@ EMITD | pub  | ( u — ) | lim. 0 <= *u* <= 9: convert *u* into the ascii equiva
 TAB  | pub   | ( — ) | emit a tab character
 TABS | pub   | ( u — ) | emit *u* tab characters
 INDENT | pub | ( u — ) | emit a carriage return followed by *u* tabs
-@org | var   | | variable: data space base pointer
 ~m   | var   | | variable: dictionary position
 ~o   | var   | | variable: data space tracker pointer
 mecrisp | pub | | initialise *~m*, *~o*, stack and *~laps*
@@ -117,10 +138,10 @@ ctrls | VECTORS | | an array of 32 vectors corresponding to the 32 control keys;
 CTRL! | pub  | ( cfa n — ) | *ctrls[n]* ← *cfa* AND $1F: save the function address in the *n*th vector
 ~k   | var   | | variable for last command entry
 REX  | pri   | | re-execute last entry
-DISCARD | pri | | discard and reset the CLI **NOT SURE HOW THIS WORKS**
-|    | key   | ^C | perform *RESET*
 |    | key   | ^X | perform *REX*
+DISCARD | pri | | discard and reset the CLI **NOT SURE HOW THIS WORKS**
 |    | key   | esc | perform *DISCARD*
+|    | key   | ^C | perform *RESET*
 
 - Background polling whilst waiting for input
 
@@ -150,22 +171,6 @@ respond | pub | | print the execution operating response
 word | type  | stack | comment
 ---  | :---: | :---: | ---
 TACHYON | pub | | main Tachyon user prompt: defined as the system quit function
-
-- Data space variables — uninitialised
-
-word | type  | stack | comment
----  | :---: | :---: | ---
-DATA | const | | ← $20030000: base for all data and buffers
-org  | pub   | ( n — ) | *org* ← *n*: update data space pointer with the given value
-org@ | pub   | ( — addr ) | return the address pointed to by the data space pointer
-res  | pre   | ( n — ) | *org* ← *org* + *n*: reserve bytes in data space without assigning a name
-(bytes) | pri | ( n — ) | create a new constant of *n* bytes, updating *org* ← *org* + *n* afterwards
-bytes | pre  | ( n — ) | pre-emptive version of *(bytes)*: use *n* *bytes* *new_name*
-byte | pre   | ( — ) | allocate a single byte constant
-alorg | pub  | ( n — ) | align *@org* on a boundary appropriate to the given value *n*: *n* should be a power of 2
-(longs) | pri | ( n — ) | reserve space in the data space for *n* 32 bit long values
-longs | pre  | ( n — ) | pre-emptive version of *(longs)*
-long | pre   | ( — ) | allocate space for a single 32 bit long value
 
 - Tachyon like utility words
 
@@ -319,6 +324,7 @@ BLINK | pub   | ( — ) | cause output text to blink
 WRAP  | pub   | ( on/off — ) | switch word wrap on or off if it is supported by the terminal
 UTF8  | pub   | ( code — ) | output a UTF8 character *code*
 EMOJI | pub   | ( ch — ) | output an emoji character *ch*
+CSIKEY | pub  | ( — code ) | read a CSI sequence and abbreviate it to 32 bits returning in *code*
 
 - Print Hex & Binary numbers
 
@@ -408,10 +414,10 @@ NFA'   | pub  | ( — nfa ) | return name field address *nfa* for next word on i
 word | type  | stack | comment
 ---  | :---: | :---: | ---
 ~n     | var  | | variable used to count characters output to line
-tw     | var  | | variable defining terminal width: default = 80
+~tw    | var  | | variable defining terminal width: default = 80
 HIGHLIGHT | pub | ( lfa — lfa ) | set the pen colour depending upon the word characteristic flags
 nwords | pub  | ( max — ) | output a list of *max* words starting from the most recent: if *max* is negative, print all
-qw     | pub  | ( — ) | output a list of the 20 most recently defined words
+qw     | pub  | ( — ) | output a list of the 16 most recently defined words
 words  | pub  | ( — ) | output a list of all defined words
 
 - Enhances SEE to display header
@@ -583,10 +589,16 @@ FBRD | func  | ( — addr ) | return the *addr* for the FBRD register
 LCR  | func  | ( — addr ) | return the *addr* for the LCR register
 UCR  | func  | ( — addr ) | return the *addr* for the UCR register
 ~baud | var  | | ← 115200: current baudrate (default: 115200)
-BAUD | func  | ( baud — ) | set the current UART to the required *baud*rate
-CONBAUD | func | ( baud — ) | set the console baudrate
+BAUD | pub  | ( baud — ) | set the current UART to the required *baud*rate
+CONBAUD | pub | ( baud — ) | set the console baudrate
+!UART | pub  | ( rxpin txpin baud — ) | initialise the active UART, receiving on pin *rxpin*, sending on pin *txpin* and with a baud rate of *baud*
 RX   | func  | ( — c ) | receive a character, *c*, from the active UART
 TX   | func  | ( c — ) | senc a character, *c*, to the active UART
+UFR1? | pri  | ( m — f ) | test bits in *m* against the UART0 UFR, FIFO register, and return the boolean result in *f*
+RX1? | pub   | ( — f ) | test for the presence of an entry in the UART0 input FIFO, return the state in *f*
+RX1  | pub   | ( — c ) | wait for a character to arrive in the UART0 input FIFO and return it in *c*
+TX1  | pub   | ( c — ) | wait for space in the UART0 output FIFO and place *c* into it
+COM1 | pub   | ( — ) | set UART0 as the standard input and output devices
 
 - Experimental Interactive PIO register methods — WIP
 
@@ -693,7 +705,7 @@ SDCK | pub   | ( — pin ) | return the GPIO *pin* assigned to the SPI clock sig
 SDDI | pub   | ( — pin ) | return the GPIO *pin* assigned to the SPI data in signal
 SDDO | pub   | ( — pin ) | return the GPIO *pin* assigned to the SPI data out signal
 SDCS | pub   | ( — pin ) | return the GPIO *pin* assigned to the SPI chip select signal
-SDPINS | pub | ( csdodick — ) | assign the four pin values ready for using the SD SPI interface
+SDPINS | pub | ( cs:d0:d1:ck — ) | assign the four pin values ready for using the SD SPI interface, the pins are in the lowest four nibbles of the parameter in the order shown
 CLKHI | func | ( — ) | set the SPI clock signal pin high
 CLKLO | func | ( — ) | set the SPI clock signal pin low
 SPICLK | func | ( — ) | cycle the SPI clock signal pin to high and then to low
@@ -703,7 +715,8 @@ SPIWB | func | ( c — ) | send the 8 bit byte *c* to the SPI interface
 SPIWC | func | ( cmd — ) | send *cmd* formatted as a command to the SPI interface
 SPIWL | func | ( u — ) | send the 32 bit long *u* to the SPI interface
 SPIRD | func | ( n1 — n2 ) | read 8 bits of data from the SPI DO pin, performing clock cycles between each bit, and shift into the lowest bits of *n1*; *n2* is returned with the upper bits of *n1* discarded
-SPIRL | func | ( — u ) | receive a 32 bit long *u* from  the SPI interface
+SPIRB | func | ( — b ) | receive an 8 bit byte *b* from the  SPI interface
+SPIRL | func | ( — u ) | receive a 32 bit long *u* from the SPI interface
 SPIRX | func | ( dst c — ) | receive a set of *c* longs and store them in the buffer at *dst*
 SPITX | func | ( src c — ) | send a set of *c* longs from the buffer at *src*
 SDCLK | func | ( — ) | send a set of 8 SPI clock signals

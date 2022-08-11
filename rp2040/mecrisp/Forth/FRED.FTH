@@ -1,15 +1,18 @@
 \           ... FORTH RAPID EMBEDDED DEVELOPMENT EDITOR ...
 
 mecrisp
-2206211400 tme?                 --- make sure Tachyon Mecrisp Extension  is new enough
+2207190000 tme?                 --- make sure Tachyon Mecrisp Extension  is new enough
 ~edsect org  FORGET *FRED*      --- reclaim code and data
     org? org                    --- use latest org? -  all modules will define this to indicate next free
 
-pub *FRED*      PRINT" FRED - Forth Rapid Embedded Development Editor 220713-2346 " ;
+pub *FRED*      PRINT" FRED - Forth Rapid Embedded Development Editor 220715-0054 " ;
 {
 TABLE OF CONTENTS
-    *THEME*
-    *HIGHLIGHTING*
+    *THEME*     *HIGHLIGHTING*
+    *KEYS*
+
+
+
 
 TO DO:  Limit editing to file size
     insert/delete page
@@ -19,13 +22,10 @@ TO DO:  Limit editing to file size
     also other directives i.e. set theme, modes, etc.
     add conditional compile directives #IFDEF #IF etc
     column select mode - maybe ^B ^B first or ALT B
-    hypertext - table of contents etc.
 }
 
---- Placing  here allows FRED to load back over itself ( RELOAD now QUITS anyway )
-pri EDLOAD              PLAIN  -FLOAD  QUIT ;
 
-(   !!! PATCHES !!!     )
+
 
 
 
@@ -35,28 +35,28 @@ pri EDLOAD              PLAIN  -FLOAD  QUIT ;
 DATA $E000 +    constant clipboard      --- clipboard holds up to 8kb (less 512 bytes at $2003FE00)
 DATA $C000 +    constant pagebuf        --- allocate up to 8kB PAGEBUF near end of RAM
 16              constant maxtabs
+32              constant ftab*          --- ftab size
 4 kb            constant =pagesz        --- display and edit one page at a time default
 128             constant ew
 
 \       *** VARIABLES ***
-long ~edsect            --- starting sector of current page
-long ~page
+    long ~edsect        --- starting sector of current page
+    long ~page
 
-long ~begin             --- marks beginning of selection (default -1 = none)
-long ~end               --- marks end of select
-long ~clipsz            --- size of content copied to clipboard
+    long ~begin         --- marks beginning of selection (default -1 = none)
+    long ~end           --- marks end of select
+    long ~clipsz        --- size of content copied to clipboard
 
-long ~qt                --- quick time clock latch
-long ~find              --- length of find string
-long ~idle              --- idle timer - used to determine auto refresh
-long ~key               --- ASCII or abbreviated 32-bit  CSI code
-long ~seq               --- highlight sequence
-long ~hflgs             --- highlight flags
-
-2 bytes ~pagesz            --- sectors/page (pagesize)
-byte ~dw                --- print display width (truncates page width)
-byte ~ftab              --- current file tab active
-32      constant ftab*  --- ftab size
+    long ~qt            --- quick time clock latch
+    long ~find          --- length of find string
+    long ~idle          --- idle timer - used to determine auto refresh
+    long ~key           --- ASCII or abbreviated 32-bit  CSI code
+    long ~seq           --- highlight sequence
+    long ~hflgs         --- highlight flags
+2   bytes ~pagesz        --- sectors/page (pagesize)
+    byte ~dw            --- print display width (truncates page width)
+    byte ~ftab          --- current file tab active
+32  bytes ~word
 maxtabs ftab* * bytes ~ftabs      --- hold the context for files
 
 long ~edcold
@@ -158,16 +158,6 @@ pub FORMAT.PAGES
 --- confirm complete page format with Y
 pri ?FORMAT.PAGES       @STATUS PRINT"  Format? " KEY a>A ` Y = IF FORMAT.PAGES THEN ;
 
-
-
-
-
-
-
-
-
-
-
 \      ... *THEME* ...    --- black red green yellow blue magenta cyan white
 pub THEME               4 << OR 4 << OR 4 << OR ~theme ! ;
 pri -THEME              ~theme @ SWAP 2 << >> >B DUP >N PLAIN PEN 4 >> PAPER ;
@@ -184,6 +174,16 @@ pri -HDRS               2 -THEME ;
 pri -INFO               white pen red paper ;
 pri -TEXT               0 -THEME ;
 pri -TITLE              -HDRS bold white pen ;
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -239,20 +239,20 @@ pri MATCH? ( b s -- f )
 
 \       ... KEYBOARD INPUT ...
 pri EDINP ( str -- len )        @STATUS -INFO 26 SPACES @STATUS -HDRS TYPE -INFO TIB 32 ACCEPT ;
-
 pri EDNUM ( str -- num f )      EDINP TIB SWAP NUMBER ;
-\       *** ENHANCED KEY INPUT ***
---- return with char or long for single key or escape sequence
-pub EDKEY ( --- code )
-    KEY DUP $1B =
-    IF  cycles SWAP
-      BEGIN KEY?
----                ignore ;      else merge to code       update timeout
-        IF KEY DUP ` ; = IF DROP ELSE SWAP 8 << OR THEN   NIP cycles SWAP THEN
----     timeout after 3ms of inactivity - must be end of sequence
-        OVER cycles - ABS 3000 >
-      UNTIL NIP
-    THEN DUP ~key ! ;
+pri EDKEY                       CSIKEY DUP ~key ! ;
+
+
+
+
+
+
+
+
+
+
+
+
 
 \       ... *HIGHLIGHTING*  ...
 
@@ -283,15 +283,14 @@ ___ UNDERLINE ___
 !!! BLINK !!!
 ... REVERSE ...
 }
-
+pri ?MODE       8 s" |X|" MATCH? DROP   ;
 
 
 \       ... TEXT DISPLAY ...
 
 pri ?HIGHLIGHT ( ch -- )
     ~seq @ 8 << OR ~seq !
-    ?BOLD ?UL ?BLINK ?COMMENT ?REVERSE ?PARA  ?BRACES
-    ?CODE
+    ?MODE 8 ~hflgs BIT? 0= IF ?BOLD ?UL ?BLINK ?COMMENT ?REVERSE ?PARA  ?BRACES ?CODE THEN
 ;
 pri .LINE# ( index -- )
 --- print line numbers or offset
@@ -318,6 +317,7 @@ pri .LINE               LEFTLN .ROW ;
 
 
 
+
 \       ... PAGE DISPLAY ...
 
 pri .FTABS
@@ -332,7 +332,7 @@ pri .FTABS
 
 pri .PAGE
 --- page offset    for page size
-    PAGEADR pagesz ( DUP 2 >> + ) BOUNDS
+    0 ~hflgs H! PAGEADR pagesz ( DUP 2 >> + ) BOUNDS
       DO CRLF I .ROW  ew +LOOP ;
 pri HEADER
     OFF CURSOR -HDRS HOME dw 8 + SPACES CR   .PAGE# SPACE .INFO 1 2 XY .FTABS ;
@@ -465,7 +465,7 @@ pri SAVECFG
     NOT IF RW ~ftabs SWAP 512 MOVE FLUSH ELSE DROP THEN  ;
 ---   load config & file tabs                    else init ftabs and create config file
 pri LOADCFG             EDCFG IF ~ftabs 512 MOVE ELSE ~ftabs 512 ERASE 32 KB FSIZE! SAVECFG THEN  ;
-\ pri MAKECFG             LOADCFG 32 KB FSIZE! SAVECFG ;
+
 
 
 pub SAVEFILE
@@ -521,18 +521,17 @@ pri ?EDFIND ( dir -- )
       REPEAT DROP
    THEN DROP @STATUS PRINT"  NOT FOUND     "
 ;
+pub EDLINK
+    TIB 32 ERASE tcur@ PAGE BEGIN 1- DUP C@ $21 < UNTIL 1+
+    DUP BEGIN 1+ DUP C@ $21 < UNTIL OVER - TIB SWAP MOVE TIB LEN$ ~find ! 1 ?EDFIND                              ;
+
 pub EDFIND              s" FIND " EDINP ~find ! 1 ?EDFIND ;
-pri WLEN ( a ch -- n )  OVER SWAP BEGIN OVER C@ OVER <> WHILE b++ REPEAT DROP - ABS ;
-pub EDLINK              tcur@ PAGE DUP $20 WLEN DUP ~find ! TIB SWAP MOVE 1 ?EDFIND ;
-
-
 
 pri MARKEND             0 CLRLN REFRESH ;
 pri GOPAGE              1 MAX 1- pagesz * tcur! REFRESH ;
 pub EDPAGE              s" PAGE " EDNUM IF GOPAGE THEN ;
 pub EDSIZE              s" LINES " EDNUM IF 2 >>  ~pagesz C!  THEN ;
 pub EDWIDTH             s" COLUMNS " EDNUM IF 16 128 LIMIT ~dw C! THEN ;
-pri EDHELP              s" HELP" FOPEN$ IF 0 tcur! REFRESH THEN ;
 pri EDESC               !CLIPS REDRAW ;
 pri EDRET               CRLF PRINT" <RETURN>" KEY DROP CLS REFRESH ;
 pri EDFF                PLAIN #FF ` * 80 EMITS CRLF ;
@@ -542,19 +541,13 @@ pri EDNOP               REFRESH ;
 pri REVTAB              tcur@ 8 - 7 ANDN tcur! ;
 pri EDBEGIN             !CLIPS tcur@ ~begin ! ~end ~ ;
 pri EDEDIT              wr? SETB REFRESH ;
-pub EDPRINT             EDFF -FPRINT EDRET ;
-pub EDPRINTP            EDFF BEGIN DUP C@ WHILE DUP C@ DUP EMIT $0D = IF $0A EMIT THEN 1+ REPEAT DROP EDRET ;
-pub EDQUIT              SAVECFG 1 @FOOTER -INFO PRINT"  CLOSED " PLAIN !SP QUIT ;
 
-
-#INCLUDE IMPORT          --- ... include import to page format routines ...
 \     *** PORTING UTILITY  from/to page files ***
 pri IMPORT!
     DUP $0A $0D WITHIN
     IF OVER $0D = OVER $0A = AND NOT IF LEFTLN ew + tcur! THEN
      --- write the character directly to the page buffer
-    ELSE DUP pagebuf tcur@ + C! 1 tcur+! THEN
-;
+    ELSE DUP pagebuf tcur@ + C! 1 tcur+! THEN ;
 pri IMPORTS ( srcsect size dstsec -- )
     3RD OVER AND 0= IF 2DROP EXIT THEN
 --- reopen source as main file - setup dest
@@ -565,30 +558,35 @@ pri IMPORTS ( srcsect size dstsec -- )
       FGET ?DUP
 --- process a single character checking for tabs
       IF DUP $09 =
-        IF tcur@ 7 ANDN 8 + tcur!
+        IF tcur@ 7 ANDN 8 + tcur!  ELSE IMPORT! THEN
 --- else handle CR/LF or characters
-        ELSE IMPORT!
-        THEN
 --- replace prev   save one full page
         NIP       tcur@ pagesz >= IF SAVEPAGE pagesz 9 >> ~edsect +!     WIPE.PAGE 0 tcur! THEN
       ELSE LEAVE THEN
     LOOP
 ---  insert terminator line
     DROP LEFTLN ew + pagebuf + ew 1- 0 FILL
-    SAVEPAGE UNMUTED
-;
+    SAVEPAGE UNMUTED ;
 pub IMPORT ( <from> <to> -- )
     OPEN-FILE FSIZE@ ( sect size ) OPEN-FILE ( sect1 size sect2 ) IMPORTS ;
-
-
-
-
-\ : IMPORTS ;
 pub SAVEAS
     @FILE FSIZE@ ( src size )
     SAVEFILE RWC s" SAVE AS " EDOPEN?
-    IF @FILE IMPORTS ADDTAB SHOWTAB ELSE 2DROP THEN
-;
+    IF @FILE IMPORTS ADDTAB SHOWTAB ELSE 2DROP THEN ;
+
+
+
+pri EDHELP              s" HELP" FOPEN$ IF 0 tcur! REFRESH THEN ;
+pub EDPRINT             EDFF -FPRINT EDRET ;
+pub EDPRINTP            EDFF BEGIN DUP C@ WHILE DUP C@ DUP EMIT $0D = IF $0A EMIT THEN 1+ REPEAT DROP EDRET ;
+pub EDQUIT              SAVECFG 1 @FOOTER -INFO PRINT"  CLOSED " PLAIN !SP QUIT ;
+--- this import is mainly for checking the include function
+
+
+
+
+
+
 pub EDOUT               ['] EDCHAR!!  EMIT! ;
 pri EDSTAMP             DATE@ EDOUT 6 Z U.R ` - EMIT TIME@ 100 / 4 Z U.R CON ;
 pri PAGE/CLIP ( -- a )
@@ -608,9 +606,8 @@ pri HOMEKEY
     LEFTLN tcur@ = IF PAGEADR tcur! REFRESH ELSE LEFTLN tcur! THEN
 ;
 
-
 \ ****************************************************
-\                  *** KEY COMMANDS ***
+\ *KEYS*           *** KEY COMMANDS ***
 \ ****************************************************
 
 (       *** FUNCTION KEYS F1-F10 ETC ***        )
@@ -624,25 +621,14 @@ pri F6          ;
 pri F7          ;
 pri F8          ;
 pri F9          dw 8 + $7 ANDN ew 1+ MOD 64 MAX ~dw C! REDRAW ;
-pri F10         SAVEFILE SAVECFG OPENTAB 1 @FOOTER CRLF  0 EDLOAD ;
+pri F10         SAVEFILE SAVECFG OPENTAB 1 @FOOTER CRLF  0 RELOAD ;
 pri F11         ;
 pri F12         EDDIR EDKEY DROP file$ FOPEN$ DROP REFRESH ;
 pri ^F10        PLAIN  1 @FOOTER CRLF PAGE/CLIP MLOAD QUIT ;
 pri _F3         -1 ?EDFIND REFRESH ;
 
 
-
-
-
-
-
-
-
-
-
-
 \       *** CTL+ESC KEYS ***
-
 
 pri ^HOME       0 tcur! ~offset C~ REFRESH ;
 pri ^END        ENDTEXT ;
@@ -652,27 +638,6 @@ pri ^LEFT       8 tcur-! ;
 pri ^RIGHT      8 tcur+! ;
 pri ^UP         LNUP LNUP LNUP LNUP ;
 pri ^DOWN       LNDN LNDN LNDN LNDN ;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 \       *** CSI ESCAPE SEQUENCES ***
 CREATE CSIVECS
     $001B5B48 , ' HOMEKEY ,     $001B4F46 , ' ENDKEY ,
@@ -699,7 +664,7 @@ CREATE CSIVECS
     $5B35357E , ' ^PGUP ,       $5B36357E , ' ^PGDN ,
     $5B313544 , ' ^LEFT ,       $5B313543 , ' ^RIGHT ,
     $5B313541 , ' ^UP ,         $5B313542 , ' ^DOWN ,
-    $5B33357E , ' DELLN ,
+    $5B33357E , ' DELLN ,       $1B4F3552 , ' EDLINK ,
 
 
 
@@ -855,8 +820,7 @@ pub ED ( ED <file> )
       THEN
     PRINT"  Unknown file " DIRW
     ;
-' ^ED
-^ E CTRL!
+
 0 bytes org? --- update free data org
 \ 16096  code bytes and 596 data bytes
 *END*
