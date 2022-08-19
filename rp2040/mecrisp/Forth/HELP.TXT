@@ -1,178 +1,202 @@
- ... FRED HELP MENU
-
-  Welcome to FRED, the Forth Rapid Embedded Development editor for hosting on embedded systems via a serial terminal.
-------------------------------------------------------------------------------------------------------------------------------
-... FEATURES ...
-    * Uses fixed size pages of 32 lines by 128  wide within a PC text editor friendly FAT32 file
-    * Designing for ANSI serial terminals and light memory resources.
-    * Use intuitive keyboard navigation and edit keys as well as familiar control keys (^S to save etc)
-    * Quickly switch between multiple file tabs with automatic file and session save.
-    * Session save restores the session and tabs automatically including cursor postion within files and themes
-    * Compile/interpret to the console from within the editor - by file, page, or clipboard
+1 ... FRED HELP MENU                                                                                                           
+                                                                                                                               
+  Welcome to FRED, the Forth Rapid Embedded Development editor for hosting on embedded systems via a serial terminal.          
+------------------------------------------------------------------------------------------------------------------------------ 
+... FEATURES ...                                                                                                               
+    * Uses fixed size pages of 32 lines by 128  wide within a PC text editor friendly FAT32 file                               
+    * Designing for ANSI serial terminals and light memory resources.                                                          
+    * Use intuitive keyboard navigation and edit keys as well as familiar control keys (^S to save etc)                        
+    * Quickly switch between multiple file tabs with automatic file and session save.                                          
+    * Session save restores the session and tabs automatically including cursor postion within files and themes                
+    * Compile/interpret to the console from within the editor - by file, page, or clipboard                                    
 --- ABOUT FRED ----------------------------------------------------------------------------------------------------------------
 FRED expands upon the raw 1kB block file concept by using standard FAT32 files & breaking them up into 4K pages preformatted as
-32 CR terminated lines of 127 characters. Pages allow a fixed sized chunk to be edited and saved thus using minimal resources.
-  Insertions and deletions are on a character per line or a line per page basis and changes can be saved manually with ^S.
-  Up to 32 Lines to be copied or cut to a clipboard and pasted.
-A block of text can be selected with ^B to mark the beginning and then ^C or ^X to copy or cut that block.
-  The preformatted FAT32 file also means that these files can be read as regular text files on other devices and copied etc.
-By using standard ANSI terminal controls the navigations keys work intuitively and special control key sequences are kept to
-a minimum and for less common functions only.
---- COMPATIBILITY ------------------------------------------------------------------------------------------------------------
-  An IMPORT feature allows standard text files to be imported as fixed width page files and is used by the SAVEAS function &S
-to import from the current file tab into fixed page format in a new file tab. If though the output file exists then it will be
-overwritten. When a file is initially opened it is edit protected in VIEW mode only but ^E places it into EDIT mode which is
-remembered by the automatic session save. So pages are like blocks but they many pages make up a FAT32 file plus each line is
-CR terminated for compatibility.
-
-... HELP NOTATION ...
-Keyboard keys are prefixed in this manner to indicate CTRL SHIFT ALT functions
-^       CTRL        i.e. ^Y0    Control Y followed by 0 (selects mono for the current tab)
-_       SHIFT       i.e. _F3    Shift F3 performs a reverse FIND AGAIN
-&       ALT         i.e. &S     Alt S will SAVEAS the current file into a pgae format
-... SINGLE CONTROL KEYS ...
-^A      LEFT - Alternative to left arrow
-^B      BEGIN selection block
-^C      COPY to clipboard from BEGIN to here -OR- copy whole line (no begin) -OR- copy whole page (^B ^C)
-^D      RIGHT - alternative to right arrow
-^E      EDIT - disable file write protect (use ^Y W to toggle)
-^F      FIND string - prompts for string and finds exact string including spaces - use F3 for next
-^G      GO TO PAGE - prompts for page number and goes directly to that page
-^H      BACKSPACE - destructive backspace replaces previous character with a space
-^I      TAB - positioning only to every 8th column - indents 4 spaces from left column and column 48 from end
-^J      LINE FEED - ignored
-^K      INSERT - alternative for MAC keyboards
-^L      PAGE DOWN - save any changes and page down to same position in next page
-^M      ENTER - Return to left on the next line -OR- inserts a new line in INSERT mode
-^N      NEW FILE in new tab
-^O      OPEN FILE in new tab (Initally opens in VIEW mode - use ^E to enable EDIT)
-^P      PRINT - Print file to the screen (use for simple copy and paste to PC text editor)
-^Q ***  QUIT - saves any changes and session then quits editor to the Forth console (Use ED to resume editing)
-^R      REVERT - discard any unsaved changes and revert to saved file
-^S      SAVE - save any sectors of the page that are changed (compares sectors first)
-^T      unassigned
-^U      unassigned
-^V      PASTE - paste clipboard contents (overwrites) - use ESC to clear the selection and clipboard
-^W      CLOSE FILE tab - also saves changes and updates FRED.CFG
-^X      CUT - cut current line or if ^B was used then cut from there onto clipboard (ESC will clear the clipboard!)
-^Y      COMMAND - Accept next key as an extended control command  - see EXTENDED COMMANDS
-^Z      UNDO - same as REVERT (may add line undo features )
-^[      ESCAPE - same as ESC key - cancel any selections and clear clipboard
-^\      unassigned
-^]      FULL SCREEN 128 columns x 32 rows
-^^      unassigned
-^_      unassigned
-... COMMAND LINE ...
-ED              Open the previous session with multiple file tabs (normal start)
-ED <name>       Open an existing file (deprecated as files can be opened within FRED)
-EDNEW <name>    CREATE a new 1MB file formatted with blanks and a CR at the end of each 128 byte line (127 chars + CR)
-EDSECT          Edit the given sector i.e. 1 EDSECT (NOTE: need to add hex mode)
-... NAVIGATION ...      Navigation keys do not modify the file
-HOME            Go HOME to the left of the line, or else to the start of the page, or else to the start of the file
-^HOME           Go HOME to the start of the file
-END             Go firstly to the END of the text in the line, or else to the logical end of the file (null terminator)
-PGUP            Save any changes and jump to previous PAGE UP in the same position
-^PGUP           PGUP 4 lines
-PGDOWN          Save any changes and jump to next PAGE DOWN in the same position
-PGDOWN          PGDN 4 lines
-LEFT
-RIGHT
-UP              Move UP one line and page up to last line of previous page if necessary
-DOWN            Move DOWN one line and page down to first line of next page if necessary
-^UP             Move UP four lines
-^DOWN           Move DOWN four lines
-TAB             Positioning to next 8th column - indents 4 spaces if on left column or jumps column 48 after text
-_TAB            Reverse TAB
-ENTER           Move to start of next line -OR-
-... FILE TABS ...       Switching tabs also saves any changes and updates the session file
-&LEFT           Switch to previous file tab (Alt left arrow)
-&RIGHT          Switch to next file tab (Alt right arrow)
-&0..9           Switch directly to selected tab 0..7 or next active
-^W              Close file tab
-^O              Open file tab
-^N              New file tab
-&S              SAVE AS - creates or open an output file and imports current file - then opens it in a new tab
-^Y left/right   Interactively mve file tab left or right - any other key exits
-
-... FUNCTION KEYS ...
-F1              Open HELP PAGES from HELP file - use ^Z to revert to working file (switches to READ mode)
-F2
-F3              FIND again (forwards)
-_F3             FIND again (backwards)
-^F3             FIND current word (cursor may be anywhere on the word)
-F4
-F5
-F6
-F7
-F8
-F9              TOGGLE NARROW/WIDE DISPLAY  (deprecated)
-F10             COMPILE CURRENT FILE
-F11
-F12             DIRECTORY
-^F10            COMPILE CLIPBOARD or whole page if clipboard is empty
-
-... EXTENDED COMMANDS ...
-^Y W            Toggle EDIT or READ mode
-^Y I            Toggle auto-indent
-^Y 0..9         Select a theme 0 to 9
-^Y <CR>         Format page to CR terminators (doesn't affect any other data)
-^Y SPACE        Wipe line to blanks
-^Y Z            Wipe page to blanks and format with CR terminators (not marked as modified as safeguard)
-^Y ^Z           Format the whole file - prompts for Y to continue
-^Y L n          Set pages size in multiple of 4 lines from 4 to 64
-^Y C n          Set displayed column width up to 128 (does not change the page width)
-^Y T            Insert timestamp as YYMMDD-HHMM   220623-2319  (forces overwrite )
-^Y left/right   MOVE file tab left or right interactively - any other key exits
-
-
-
-
-... EDIT KEYS...
-
-^B              BEGIN selection
-^C              Copy current line or if ^B was used then select from the ^B to the current cursor poistion
-^V              Paste line or block
-^X              Cut line - copies the line to the clipboard and deletes the line (overwrites with spaces)
-DEL             Delete character and move the rest of the line back OR delete the whole line if blank
-^DEL            Delete the whole line
-INS             Toggle INSERT or OVERWRITE mode
-^INS            --- not assigned
-ENTER           Move to start of next line (no overwrite)
-&ENTER          Insert blank line here
-_ENTER          Delete a line and move page up - insert blank line at end
-ESC             Cancel any selections and refresh the page.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-... EDITING ...
-INSERT          Switch between overwrite mode and insert (only auto inserts on the current line)
-DELETE          Delete character and move remainder of line back one
-ENTER  +alt     Insert blank line here
-ENTER  +shift   Delete a line and move page up - insert blank line at end
-ESC             Clear the clipboard and selection
-HOME   +ctrl    Go home to start of file
-END    +ctrl    Insert a line of null terminators
-
-... EDIT KEYS...
-^B              BEGIN selection - marks begining of selection
-^C              Copy current line or if ^B was used then select from the ^B to the current cursor poistion
-^B ^C           Select and copy the whole page (^B and ^C are in the same position)
-^V              Paste line or block
-^X              Cut line - copies the line to the clipboard and deletes the line (overwrites with spaces)
-
+32 CR terminated lines of 127 characters. Pages allow a fixed sized chunk to be edited and saved thus using minimal resources. 
+  Insertions and deletions are on a character per line or a line per page basis and changes can be saved manually with ^S.     
+  Up to 32 Lines to be copied or cut to a clipboard and pasted.                                                                
+A block of text can be selected with ^B to mark the beginning and then ^C or ^X to copy or cut that block.                     
+  The preformatted FAT32 file also means that these files can be read as regular text files on other devices and copied etc.   
+By using standard ANSI terminal controls the navigations keys work intuitively and special control key sequences are kept to   
+a minimum and for less common functions only.                                                                                  
+--- COMPATIBILITY ------------------------------------------------------------------------------------------------------------ 
+  An IMPORT feature allows standard text files to be imported as fixed width page files and is used by the SAVEAS function &S  
+to import from the current file tab into fixed page format in a new file tab. If though the output file exists then it will be 
+overwritten. When a file is initially opened it is edit protected in VIEW mode only but ^E places it into EDIT mode which is   
+remembered by the automatic session save. So pages are like blocks but the many pages make up a FAT32 file plus each line is   
+CR terminated for compatibility.                                                                                               
+                                                                                                                               
+... HELP NOTATION ...                                                                                                          
+Keyboard keys are prefixed in this manner to indicate CTRL SHIFT ALT functions                                                 
+^       CTRL        i.e. ^Y0    Control Y followed by 0 (selects mono for the current tab)                                     
+_       SHIFT       i.e. _F3    Shift F3 performs a reverse FIND AGAIN                                                         
+&       ALT         i.e. &S     Alt S will SAVEAS the current file into a pgae format                                          
+... SINGLE CONTROL KEYS ...                                                                                                    
+^A      LEFT - Alternative to left arrow                                                                                       
+^B      BEGIN selection block                                                                                                  
+^C      COPY to clipboard from BEGIN to here -OR- copy whole line (no begin) -OR- copy whole page (^B ^C)                      
+^D      RIGHT - alternative to right arrow                                                                                     
+^E      EDIT - disable file write protect (use ^Y W to toggle)                                                                 
+^F      FIND string - prompts for string and finds exact string including spaces - use F3 for next                             
+^G      GO TO PAGE - prompts for page number and goes directly to that page                                                    
+^H      BACKSPACE - destructive backspace replaces previous character with a space                                             
+^I      TAB - positioning only to every 8th column - indents 4 spaces from left column and column 48 from end                  
+^J      LINE FEED - ignored                                                                                                    
+^K      INSERT - alternative for MAC keyboards                                                                                 
+^L      PAGE DOWN - save any changes and page down to same position in next page                                               
+^M      ENTER - Return to left on the next line -OR- inserts a new line in INSERT mode                                         
+^N      NEW FILE in new tab                                                                                                    
+^O      OPEN FILE in new tab (Initally opens in VIEW mode - use ^E to enable EDIT)                                             
+^P      PRINT - Print file to the screen (use for simple copy and paste to PC text editor)                                     
+^Q ***  QUIT - saves any changes and session then quits editor to the Forth console (Use ED to resume editing)                 
+^R      REVERT - discard any unsaved changes and revert to saved file                                                          
+^S      SAVE - save any sectors of the page that are changed (compares sectors first)                                          
+^T      unassigned                                                                                                             
+^U      unassigned                                                                                                             
+^V      PASTE - paste clipboard contents (overwrites) - use ESC to clear the selection and clipboard                           
+^W      CLOSE FILE tab - also saves changes and updates FRED.CFG                                                               
+^X      CUT - cut current line or if ^B was used then cut from there onto clipboard (ESC will clear the clipboard!)            
+^Y      COMMAND - Accept next key as an extended control command  - see EXTENDED COMMANDS                                      
+^Z      UNDO - same as REVERT (may add line undo features )                                                                    
+^[      ESCAPE - same as ESC key - cancel any selections and clear clipboard                                                   
+^\      unassigned                                                                                                             
+^]      FULL SCREEN 128 columns x 32 rows                                                                                      
+^^      unassigned                                                                                                             
+^_      unassigned                                                                                                             
+... COMMAND LINE ...                                                                                                           
+ED              Open the previous session with multiple file tabs (normal start)                                               
+ED <name>       Open an existing file (deprecated as files can be opened within FRED)                                          
+EDNEW <name>    CREATE a new 1MB file formatted with blanks and a CR at the end of each 128 byte line (127 chars + CR)         
+EDSECT          Edit the given sector i.e. 1 EDSECT (NOTE: need to add hex mode)                                               
+... NAVIGATION ...      Navigation keys do not modify the file                                                                 
+HOME            Go HOME to the left of the line, or else to the start of the page, or else to the start of the file            
+^HOME           Go HOME to the start of the file                                                                               
+END             Go firstly to the END of the text in the line, or else to the logical end of the file (null terminator)        
+PGUP            Save any changes and jump to previous PAGE UP in the same position                                             
+^PGUP           PGUP 4 lines                                                                                                   
+PGDOWN          Save any changes and jump to next PAGE DOWN in the same position                                               
+PGDOWN          PGDN 4 lines                                                                                                   
+LEFT                                                                                                                           
+RIGHT                                                                                                                          
+UP              Move UP one line and page up to last line of previous page if necessary                                        
+DOWN            Move DOWN one line and page down to first line of next page if necessary                                       
+^UP             Move UP four lines                                                                                             
+^DOWN           Move DOWN four lines                                                                                           
+TAB             Positioning to next 8th column - indents 4 spaces if on left column or jumps column 48 after text              
+_TAB            Reverse TAB                                                                                                    
+ENTER           Move to start of next line -OR-                                                                                
+... FILE TABS ...       Switching tabs also saves any changes and updates the session file                                     
+&LEFT           Switch to previous file tab (Alt left arrow)                                                                   
+&RIGHT          Switch to next file tab (Alt right arrow)                                                                      
+&0..9           Switch directly to selected tab 0..9 or next active                                                            
+^W              Close file tab                                                                                                 
+^O              Open file in new tab                                                                                           
+^N              New file tab                                                                                                   
+&S              SAVE AS - creates or open an output file and imports current file - then opens it in a new tab                 
+^Y left/right   Interactively mve file tab left or right - any other key exits                                                 
+                                                                                                                               
+... FUNCTION KEYS ...                                                                                                          
+F1              Open HELP PAGES from HELP file - use ^Z to revert to working file (switches to READ mode)                      
+F2                                                                                                                             
+F3              FIND again (forwards)                                                                                          
+_F3             FIND again (backwards)                                                                                         
+^F3             FIND current word (cursor may be anywhere on the word)                                                         
+F4                                                                                                                             
+F5                                                                                                                             
+F6                                                                                                                             
+F7                                                                                                                             
+F8                                                                                                                             
+F9              TOGGLE NARROW/WIDE DISPLAY  (deprecated)                                                                       
+F10             COMPILE CURRENT FILE                                                                                           
+F11                                                                                                                            
+F12             DIRECTORY                                                                                                      
+^F10            COMPILE CLIPBOARD or whole page if clipboard is empty                                                          
+                                                                                                                               
+... EXTENDED COMMANDS ...                                                                                                      
+^Y W            Toggle EDIT or VIEW mode                                                                                       
+^Y I            Toggle auto-indent                                                                                             
+^Y 0..9         Select a theme 0 to 9                                                                                          
+^Y <CR>         Format page to CR terminators (doesn't affect any other data)                                                  
+^Y SPACE        Wipe line to blanks                                                                                            
+^Y Z            Wipe page to blanks and format with CR terminators (not marked as modified as safeguard)                       
+^Y ^Z           Format the whole file - prompts for Y to continue                                                              
+^Y L n          Set pages size in multiple of 4 lines from 4 to 64                                                             
+^Y C n          Set displayed column width up to 128 (does not change the page width)                                          
+^Y T            Insert timestamp as YYMMDD-HHMM   220623-2319  (forces overwrite )                                             
+^Y left/right   MOVE file tab left or right interactively - any other key exits                                                
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+... EDIT KEYS...                                                                                                               
+                                                                                                                               
+^B              BEGIN selection                                                                                                
+^C              Copy current line or if ^B was used then select from the ^B to the current cursor poistion                     
+^V              Paste line or block                                                                                            
+^X              Cut line - copies the line to the clipboard and deletes the line (overwrites with spaces)                      
+DEL             Delete character and move the rest of the line back OR delete the whole line if blank                          
+^DEL            Delete the whole line                                                                                          
+_DEL            Delete leading spaces from this point on this line                                                             
+INS             Toggle INSERT or OVERWRITE mode                                                                                
+^INS            --- not assigned                                                                                               
+ENTER           Move to start of next line (no overwrite)                                                                      
+&ENTER          Insert blank line here                                                                                         
+_ENTER          Delete a line and move page up - insert blank line at end                                                      
+ESC             Cancel any selections and refresh the page.                                                                    
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+... EDITING ...                                                                                                                
+INSERT          Switch between overwrite mode and insert (only auto inserts on the current line)                               
+DELETE          Delete character and move remainder of line back one                                                           
+ENTER  +alt     Insert blank line here                                                                                         
+ENTER  +shift   Delete a line and move page up - insert blank line at end                                                      
+ESC             Clear the clipboard and selection                                                                              
+HOME   +ctrl    Go home to start of file                                                                                       
+END    +ctrl    Insert a line of null terminators                                                                              
+                                                                                                                               
+... EDIT KEYS...                                                                                                               
+^B              BEGIN selection - marks begining of selection                                                                  
+^C              Copy current line or if ^B was used then select from the ^B to the current cursor poistion                     
+^B ^C           Select and copy the whole page (^B and ^C are in the same position)                                            
+^V              Paste line or block                                                                                            
+^X              Cut line - copies the line to the clipboard and deletes the line (overwrites with spaces)                      
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+                                                                                                                               
+        HIGHLIGHTING                                                                                                           
+                                                                                                                               
+!!!     blink !!!                                                                                                              
+...     reverse ...                                                                                                            
+--- comment ---                                                                                                                
+*** bold ***                                                                                                                   
+pri private definition                                                                                                         
+pub public definition                                                                                                          
+                                                                                                                               
+   

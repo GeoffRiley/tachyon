@@ -5,7 +5,7 @@ mecrisp
 ~edsect org  FORGET *FRED*      --- reclaim code and data
     org? org                    --- use latest org? -  all modules will define this to indicate next free
 
-pub *FRED*      PRINT" FRED - Forth Rapid Embedded Development Editor 220715-0054 " ;
+pub *FRED*      PRINT" FRED - Forth Rapid Embedded Development Editor 220725-2346 " ;
 {
 TABLE OF CONTENTS
     *THEME*     *HIGHLIGHTING*
@@ -255,14 +255,14 @@ pri EDKEY                       CSIKEY DUP ~key ! ;
 
 
 \       ... *HIGHLIGHTING*  ...
-
 create :$   $20 C, ` : C, $0D C,
 pri ?CODE
                 7 ~hflgs BIT? IF ~seq C@ $20 = IF -TEXT 7 ~hflgs CLRB THEN THEN
                 7 s" ( " MATCH? IF -TEXT THEN
                 7 s"  bup" MATCH? IF red pen THEN               --- pub
                 7 :$ 3 MATCH? IF red pen THEN
-                7 s"  irp" MATCH? IF black pen BOLD THEN ;      --- pri
+                7 s"  irp" MATCH? IF black pen BOLD THEN        --- pri
+;
 pri ?BOLD       0 s" ***" MATCH? IF BOLD THEN ;
 pri ?UL         1 s"  ___" MATCH? IF UL THEN ;
 pri ?BLINK      2 s" !!!" MATCH? IF BLINK THEN ;
@@ -354,12 +354,14 @@ pri ?IDLE
 --- smart tab will jump to comments column or indent 4 spaces etc
 pri EDTAB
     @x 0= IF 4 tcur+! EXIT THEN  --- only 4 spaces from left margin
+    tcur@ 8 + 7 ANDN  tcur! ;
+{
 --- if previous a char & some text between cols 8..47 then tab to 48   else standard tab       set cursor
     tcur@ 1- ED@ $20 > tcur@ ew 1- AND 8 47 WITHIN AND
 --- but no more text on the remainder of the line
     0 tcur@ PAGE BEGIN DUP C@ $0D <> WHILE DUP C@ $20 > IF NIP 1 SWAP THEN 1+ REPEAT DROP 0= AND
     IF LEFTLN 48 +  ELSE tcur@ 8 + 7 ANDN THEN tcur! ;
-
+}
 pri GOLEFT              1 tcur-! ;
 pri GORIGHT             1 tcur+! ;
 pri LNUP                ew tcur-! @y #lines 1- = ~offset C@ 0<> AND IF -1 ~offset C+! ew 4 * tcur+! THEN ?PAGE ?REFRESH ;
@@ -380,16 +382,16 @@ pri EDCHAR! ( ch -- )   wr? BIT? IF tcur@ ED!  3 ~eflgs SET THEN ;
 pri EDCHAR!!            wr? BIT? IF EDCHAR! 1 tcur+! tcur@ ED@ $0D = IF 1 tcur+! THEN ELSE DROP THEN ;
 --- write char to file        forward but skip any embedded CR    then check refresh
 pri EDCHAR              DUP EMIT EDCHAR!! ?REFRESH ;
-
-
 \       ... INSERT/DELETE ...
 
 pri DELLN --- Delete a line in the page
     LEFTLN PAGE DUP ew + SWAP   OVER pagesz // pagesz SWAP - MOVE
     tcur@ pagesz / pagesz * pagesz + ew - PAGE ew 1- $20 FILL REFRESH save? SETB ;
-pri DELCH --- Delete a char but if the line is blank then delete the line
-    LEFTLN PAGE BLANKS? IF DELLN ELSE tcur@ PAGE DUP 1+ SWAP ew @x - 2- MOVE THEN
-   .LINE save? SETB ;
+pri DELCH       tcur@ PAGE DUP 1+ SWAP ew @x - 2- MOVE ;
+pri ?DELCH --- Delete a char but if the line is blank then delete the line
+    LEFTLN PAGE BLANKS? IF DELLN ELSE DELCH THEN .LINE save? SETB ;
+pri DELSP --- delete spaces until a char is detected
+    tcur@ PAGE BLANKS? ?EXIT BEGIN tcur@ PAGE C@ $20 = WHILE DELCH REPEAT .LINE save? SETB ;
 
 pri EDINS --- toggle insert/overwrite mode
     ins? BIT? IF ins? CLRB ELSE ins? SETB THEN REFRESH !TEXTXY ;
@@ -408,8 +410,6 @@ pri EDCR --- go to start of next line or auto-indent OR insert a line if at star
     LEFTLN indent? BIT?
       IF   BEGIN DUP ED@ $20 = WHILE 1+ REPEAT DUP ED@ $0D = IF DROP LEFTLN THEN THEN
     ew + tcur! ?REFRESH ;
-
-
 
 
 
@@ -523,7 +523,7 @@ pri ?EDFIND ( dir -- )
 ;
 pub EDLINK
     TIB 32 ERASE tcur@ PAGE BEGIN 1- DUP C@ $21 < UNTIL 1+
-    DUP BEGIN 1+ DUP C@ $21 < UNTIL OVER - TIB SWAP MOVE TIB LEN$ ~find ! 1 ?EDFIND                              ;
+    DUP BEGIN 1+ DUP C@ $21 < UNTIL OVER - TIB SWAP MOVE TIB LEN$ ~find ! 1 ?EDFIND ;
 
 pub EDFIND              s" FIND " EDINP ~find ! 1 ?EDFIND ;
 
@@ -647,7 +647,8 @@ CREATE CSIVECS
     $001B5B41 , ' LNUP ,        $001B5B42 , ' LNDN ,
     $001B5B5A , ' REVTAB ,      $00001B0D , ' INSLN ,
     $001B4F4D , ' DELLN ,       $00001B1B , ' EDESC ,
-    $001B5B40 , ' EDINS ,       $00001B7F , ' DELCH ,
+    $001B5B40 , ' EDINS ,       $00001B7F , ' ?DELCH ,
+    $5B33327E , ' DELSP ,
     --- ALT ---
     $5B313346 , ' MARKEND ,
     $5B35337E , ' PREVTAB ,     $5B36337E , ' NEXTTAB ,
@@ -671,7 +672,6 @@ CREATE CSIVECS
 
 
 
-
     --- FUNCTION KEYS ---
     $001B4F50 , ' F1 ,          $001B4F51 , ' F2 ,
     $001B4F52 , ' F3 ,          $001B4F53 , ' F4 ,
@@ -688,7 +688,7 @@ CREATE CSIVECS
     --- VT100 CODES ---
     $1B5B357E , ' PGUP ,        $1B5B367E , ' PGDN ,
     $1B5B317E , ' HOMEKEY ,     $001B4F46 , ' ENDKEY ,
-    $1B5B327E , ' EDINS ,       $1B5B337E , ' DELCH ,
+    $1B5B327E , ' EDINS ,       $1B5B337E , ' ?DELCH ,
     $001B4F50 , ' F1 ,          $001B4F51 , ' F2 ,
     $001B4F52 , ' F3 ,          $001B4F53 , ' F4 ,
     $5B31367E , ' F5 ,          $5B31377E , ' F6 ,
@@ -696,7 +696,7 @@ CREATE CSIVECS
     $5B32307E , ' F9 ,          $5B32317E , ' F10 ,
     $5B32347E , ' F12 ,         $5B31317E , ' F1 ,
     $1B5B347E , ' ENDKEY ,      $5B31337E , ' F3 ,
-    $001B5B46 , ' ENDKEY ,
+    $001B5B46 , ' ENDKEY ,      $5B33327E , ' DELSP ,
 
     $00000000 ,  --- table terminator
 
@@ -820,7 +820,8 @@ pub ED ( ED <file> )
       THEN
     PRINT"  Unknown file " DIRW
     ;
-
+' ^ED
+^ E CTRL!
 0 bytes org? --- update free data org
 \ 16096  code bytes and 596 data bytes
 *END*
