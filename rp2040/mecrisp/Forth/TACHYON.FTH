@@ -6,7 +6,7 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2208081230 constant tme
+2208231445 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
@@ -165,27 +165,23 @@ pub MUTED		hook-emit @ save-emit ! ['] DROP EMIT!  ;
 pub UNMUTED		save-emit @ EMIT! ;
 
 
-
-
+	( *** TIMERS *** )
 
 
 {
-0 variable ~mkey
-pri MKEY?	~mkey @ ;
-pri MKEY ( key -- )
-    MKEY? C@ DUP
-    IF 1 ~mkey +!
-    ELSE
-    ['] serial-key hook-key !
-    ['] serial-key? hook-key? !
-    THEN
-;
-pri MLOAD ( addr -- )
-    ~mkey !
-    ['] MKEY hook-key !
-    ['] MKEY? hook-key? !
-;
+timer: mytimer
+100000 mytimer TIMEOUT	--- timeout in 100ms using mytimer
+mytimer TIMEOUT?	--- check timeout status
+
 }
+pre TIMER:			2 (longs) ;
+
+pub TIMEOUT ( us timer -- )	cycles OVER ! 4 + ! ;
+pub TIMEOUT? ( timer -- flg )	2@ SWAP cycles - ABS < ;
+
+
+
+
 
 $20028000 constant tbuf
 0 variable ~mkey
@@ -245,7 +241,7 @@ pub ?REPORT
     THEN
 ;
 
-pub EMITS	( ch cnt -- )	0 do dup emit loop drop ;
+pub EMITS	( ch cnt -- )	0 ?do dup emit loop drop ;
 
 pub EMITD ( 0...9 -- )	9 MIN $30 + EMIT ;
 
@@ -614,7 +610,7 @@ pub ESC[			` [ ESC ;
 pri CSI ( ch -- )		ESC[ EMIT ;
 pub HOME			` H CSI ;
 pri .PAR ( n ch -- )		SWAP 0 <# #S #> TYPE EMIT ;
-pri .PAR; ( n  -- )		` ; SWAP 0 <# #S #> TYPE EMIT ;
+pri .PAR; ( n  -- )		` ; .PAR ;  \ SWAP 0 <# #S #> TYPE EMIT ;
 pri COL8! ( n a -- ) 		ESC[  .PAR; ." 5;" ` m .PAR ;
 pub @! ( n a -- n )		DUP @ -ROT ! ;
 pub PEN8 ( col -- )		DUP ~pen @! OVER <> IF 38 COL8! ELSE DROP THEN ;
@@ -1107,17 +1103,24 @@ SPIO0	TX	UART1	RTS	I2C1	SCL	PWM3	B	SIO	PIO0	PIO1
 }
 : PIN! ( b0 pin -- )	SWAP 1 AND IF HIGH ELSE LOW THEN ;
 
+
 : WAITHI ( pin -- )	BEGIN PIN? UNTIL LAP DROP ;
 : WAITLO  ( pin -- )	BEGIN PIN? 0= UNTIL LAP DROP ;
 : WAITEDGE ( pin -- ) 	DUP PIN@ IF WAITLO ELSE WAITHI THEN ;
 
+\ FAST PIN OPERATIONS - latch the pin number with PIN and refer to that
 
 long ~pin
 
 : PIN ( pin -- )	~pin C! ;
-: H			~pin C@ HIGH ;
-: L			~pin C@ LOW ;
-: F			~pin C@ FLOAT ;
+: @PIN                  ~pin C@ ;
+: H			@PIN HIGH ;
+: L			@PIN LOW ;
+: F			@PIN FLOAT ;
+: IN                    IOIN SIO@ @PIN >> 1 AND ;
+: WAITH         	BEGIN IN UNTIL LAP ;
+: WAITL         	BEGIN IN 0= UNTIL LAP ;
+: WAITE          	IN IF WAITL ELSE WAITH THEN ;
 
 : .FNC ( pin -- ) 	---	print pin function
     SPACE GPCR @ >N 4 *
@@ -1266,7 +1269,7 @@ $40050000 variable ~pwm --- base address of PWM
 
 28 bit variable _neopin
 \ Specify the NEOPIXEL to use
-: NEOPIN ( n -- )	bit _neopin ! ;
+: NEOPIN ( pin -- )	bit _neopin ! ;
 : pixdly		1 0 do loop ;
 : pix1			_neopin @ IOSET SIO!  ;
 : pix0			_neopin @ IOCLR SIO!  ;
@@ -2892,20 +2895,6 @@ pri ?RTC
 
 
 
-	( *** TIMERS *** )
-
-
-{
-timer: mytimer
-100000 mytimer TIMEOUT	--- timeout in 100ms using mytimer
-mytimer TIMEOUT?	--- check timeout status
-
-}
-pre TIMER:			2 (longs) ;
-
-pub TIMEOUT ( us timer -- )	cycles OVER ! 4 + ! ;
-pub TIMEOUT? ( timer -- flg )	2@ SWAP cycles - ABS < ;
-
 
 
 
@@ -3055,7 +3044,7 @@ pub PICOVGA --- pimoroni PICO VGA DEMO
 pub SSWIO
 	100 ms !TACHYON   \ 13 PU 14 PU
 	$0F0C0B0A SDPINS ( &15.12.11.10 )  ( <---- CHANGE TO SUIT )
-	spkr C~ 
+	spkr C~
 	%10 S" SEEED RP2040 WIO" PCB! ( b0 = Pico )
 	.PCB
 	CRLF !PICO BEEP

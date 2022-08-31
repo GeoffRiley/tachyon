@@ -161,8 +161,8 @@ The SD protocol has twelve classes of command defined, however, the SPI version 
 
 ### Class 0—Basic
 
-Command | Mandatory / Optional | Argument | Abbreviation | Description
-:---: | --- | --- | :---: | ---
+Command | Mandatory / Optional | Argument | Res | Abbreviation | Description
+:---: | --- | --- | :---: | :---: | ---
 CMD0 | Mandatory | [31:0]Fill | R1 | GO_IDLE_STATE | Reset the SD Card
 CMD1 | Mandatory | [31]Reserved_bit [30]HCS [29:0]Reserved_bits | R1 | SEND_OP_COND | Sends host capacity support information and activate the card's initialisation process. HCS is effective the the card received SEND_IF_COND command
 CMD8 | Mandatory | [31:12]Reserved_bits [11:8]Supply_voltage(Vhs) [7:0]Check_pattern | R7 | SEND_IF_COND | Sends SD memory Card interface condition that included host supply voltage information and asks the accessed card whether card can operate in supplied voltage range.

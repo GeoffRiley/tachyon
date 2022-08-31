@@ -93,6 +93,14 @@ SERIAL? | pub | | check if input is being taken from the serial port
 save-emit | var | | variable to save the value of *serial-emit*/*hook-emit* during muting
 MUTED | pub  | | save *hook-emit* in *save-emit*; set *hook-emit* to *DROP*
 UNMUTED | pub | | restore *hook_emit* from *save-emit*
+
+* Timers
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+TIMER: | pre | ( — ) | allocate 2 longs for a timer to the next word (eg: *timer: mytimer*)
+TIMEOUT | pub | ( us timer — ) | set a *timer* for *us* microseconds
+TIMEOUT? | pun | ( timer — f ) | return a flag, *f*, representing the status of the provided *timer*
 tbuf | const | | ← $2002800: tying buffer
 ~mkey | var  | | variable holding the multi-key entry buffer pointer
 MKEY? | pri  | ( — addr ) | return the multi-key entry buffer pointer
@@ -506,11 +514,22 @@ PIN! | func  | ( bit pin — ) | set the value for GPIO *pin* output to high or 
 WAITHI | func | ( pin — ) | wait for the GPIO *pin* input to enter the high (1) state
 WAITLO | func | ( pin — ) | wait for the GPIO *pin* input to enter the low (0) state
 WAITEDGE | func | ( pin — ) | wait from the GPIO *pin* input to transition from low to high, or high to low
+
+* Fast pin operations
+
+Latch the pin number using *PIN* then functions refer to that.
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
 ~pin | long  | | long variable space allocated on heap: contains the 'current' pin
 PIN  | func  | ( pin — ) | set the operating *pin* for future function
 H    | func  | ( — ) | set the current pin high
 L    | func  | ( — ) | set the current pin low
 F    | func  | ( — ) | set the current pin to float: tri-state
+IN   | func  | ( — value ) | get the *value* on the current pin
+WAITH | func | ( — ) | wait for a high value on the current pin
+WAITL | func | ( — ) | wait for a low value on the current pin
+WAITE | func | ( — ) | wait for a low to high or high to low transition on the current pin
 .FNC | func  | ( pin — ) | print the function for *pin*: 'GPIO', 'SPI ', 'UART', etc (always four characters)
 .PIN | func  | ( pin — ) | print the state of *pin*: function, allocated PAD, i/o direction, H/L condition, GPIO status and control registers
 lsio | func  | ( ­— ) | print out the state of the GPIO pins from 0 to 29.
@@ -560,7 +579,7 @@ SAUCER | func | ( — ) | produce a 'flying saucer' sound effect
 word | type  | stack | comment
 ---  | :---: | :---: | ---
 _neopin | var | | ← 28 *bit*; ($10000000)
-NEOPIN | func | ( n — ) | store selected neopin, *n*
+NEOPIN | func | ( pin — ) | store selected neopin, *pin*
 pixdly | func | ( — ) | short pixel delay
 pix1 | func  | ( — ) | set the neopixel to the on state
 pix0 | func  | ( — ) | clear the neopixel to the off state
@@ -832,3 +851,24 @@ _fat2 | longs | | 1 long; sector address of the second FAT copy
 cwdsect | longs | | 1 long; sector address of the current working sector (?)
 sdsz | const | | ← *sdvars* - *org@*; the size of the array used to hold all raw SD card related values + FAT etc.
 cwd$ | bytes | | 14 bytes; name of current working directory
+
+* SD Card specifics
+
+word | type  | stack | comment
+---  | :---: | :---: | ---
+SDIO | func  | ( — ) | setup the SD card IO system
+RELEASE | func | ( — ) | send a release signal to the SD card
+SD?  | func  | ( — card ) | check for the internal (weak) pullup resistor on the *SDCS* pin
+SDRES | func | ( — resp ) | read from the SD card until the value returned is not $FF, return that as *resp*
+CMD  | func  | ( data cmd — resp ) | send an SD command, *cmd*, with the provided *data* and return the acquired *resp*
+ACMD | func  | ( data cmd — resp ) | send an advanced SD command, *cmd*, with the provided *data*, returning the acquired *resp*
+SDTOKEN | func | ( marker — flgX ) | **unsure**
+DAT? | func  | ( — flg ) | test for data availability
+SDSTAT | func | ( — stat ) | extract the status of the SD card and return it as *stat*
+SDDAT! | func | ( addr cnt — ) | read *cnt* bytes of data into memory starting at *addr*
+CMD0 | func  | ( — ) | perform a command 0: reset SD card state
+CMD8 | func  | ( — ) | perform a command 8: sends SD card interface condition that includs host supply voltage information and asks the accessed card whether it can operate in supplied voltage range
+CMD8? | func | ( — flg ) | check the return result of the previous *CMD8* invocation
+ACMD41 | func | ( — ) | perform an advanced command 41: sends host capacity support information and activates the card's initialisation process
+SLOWCLK | func | ( — ) | send out a series of high and low clock pulses, each 2 microsecond long, to *SDCK*
+ACMD41? | func | ( — ) | repeatedly perform an *ACMD41* and check the return value
