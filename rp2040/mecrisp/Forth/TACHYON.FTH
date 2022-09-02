@@ -6,7 +6,7 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2208231445 constant tme
+2209021230 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
@@ -2717,17 +2717,20 @@ pub I2CC@ ( reg -- dat )	i2cdev C@ I2CWR I2C!    i2cdev C@ I2CRD 0 I2CGET ;
 pub I2C ( dev -- )		i2cdev C! ['] I2CC@ DUP DUP DUMP! ;
 
 	( I2C DEVICE SCAN )
-{
-create i2cs
-	$A4 C, ` RV30 , $D0 C, ` DS32 ,
-	$A4 +I2C RV3028
-	$A2 +I2C PCF8563
-	$D0 +I2C DS3231
-	$DE +I2C MCP79410
-	$40 +I2C
 
-}
-pub lsi2c	$100 0 DO I I2CRD? IF I2C.STOP I SPACE .BYTE THEN 2 +LOOP ;
+pri .i2c
+        CASE
+        $A0 OF ." EEPROM" ENDOF
+	$A4 OF ." RV3028 RTC" ENDOF
+	$A2 OF ." PCF8563 RTC" ENDOF
+	$D0 OF ." DS3231 RTC" ENDOF
+	$DE OF ." MCP79410 RTC" ENDOF
+	$40 OF ." PCF8574 I/O" ENDOF
+        ENDCASE
+        ;
+
+
+pub lsi2c	$100 0 DO I I2CRD? IF 1 I2CGET DROP I2C.STOP I SPACE DUP .BYTE SPACE .I2C THEN 2 +LOOP ;
 {
 	--- UB3 I2C WORDS ---
 
@@ -2865,7 +2868,7 @@ PCF8563 x x s m h D W M Y
 DS3231	s m h W D M Y
 }
 --- read bcd fields and mask before converting to decimal
-pub TIME@			RTC? IF RDRTC @sec U@ $3F7F7F AND BCD>DEC ELSE QTIME@ THEN ;
+pub TIME@			RTC? IF 1 I2CGET DROP RDRTC @sec U@ $3F7F7F AND BCD>DEC ELSE QTIME@ THEN ;
 pub DATE@			RDRTC @date U@ $FF1F3F AND BCD>DEC ;
 
 pub .DT				DATE@ 6 U.R $2D EMIT TIME@ 6 Z U.R ;
