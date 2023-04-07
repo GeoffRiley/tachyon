@@ -6,7 +6,7 @@ compiletoflash
 \ #############################################################
 \ #############################################################
 
-2209021230 constant tme
+2303201400 constant tme
 : *TACHYON*		." TACHYON Mecrisp extensions " tme U. ." - Peter Jakacki" ;
 
 ( changelogs at end of file )
@@ -172,7 +172,8 @@ pub UNMUTED		save-emit @ EMIT! ;
 timer: mytimer
 100000 mytimer TIMEOUT	--- timeout in 100ms using mytimer
 mytimer TIMEOUT?	--- check timeout status
-
+timer var: cycle-latch(4),us(4)
+RP2040 cycles at in microseconds.
 }
 pre TIMER:			2 (longs) ;
 
@@ -369,17 +370,17 @@ pub respond	PRINT" --- " ;
 		( USER PROMPT )
 
 pub TACHYON ( -- )
-  $BF00 ['] QUIT 4 + H!			\ DISABLE STACK RESET
-  !FAULT						\ Simple report and reset handler
+  $BF00 ['] QUIT 4 + H!			        \ DISABLE STACK RESET
+  !FAULT					\ Simple report and reset handler
   (latest) @ ~p !				\ dictionary match register
   begin
-    depth 0< IF !SP THEN		\ correct underflow
-    ~m @						\ user or source mode?
+    depth 0< IF !SP THEN		        \ correct underflow
+    ~m @					\ user or source mode?
     IF
       MUTED QUERY 	 			\ don't echo input
-      UNMUTED ?REPORT			\ but report new defs
-      SPACE INTERPRET			\ and interpret/compile
-    ELSE						\ else console mode
+      UNMUTED ?REPORT			        \ but report new defs
+      SPACE INTERPRET			        \ and interpret/compile
+    ELSE					\ else console mode
       prompt
       SERIAL?					\ fix console to handle controls
       IF
@@ -387,9 +388,9 @@ pub TACHYON ( -- )
         ~query @ execute respond		\ get input and --- separate from response
         !SERKEY					\ switch back to standard key input
       ELSE
-	    ~query @ execute respond \ get input and --- separate from response
+	    ~query @ execute respond            \ get input and --- separate from response
       THEN
-      current-source @ ~k !		\ remember position for ^X re-execute
+      current-source @ ~k !		        \ remember position for ^X re-execute
       INTERPRET					\ interpret/compile
       defers					\ defered actions are executed afterwards
     THEN
@@ -1198,7 +1199,9 @@ $40050000 variable ~pwm --- base address of PWM
 : PWM% ( duty% -- )		1000 HZ 100 DUTY ;
 
 --- output RC servo pulse of 1ms to 2ms on pin @50Hz (0..100%)
-\ : SERVO ( 0..100% pin -- )	SWAP 10 * 1000 + SWAP 20000 $7D0 ROT PWM ;
+: SERVO ( 0..100% -- )		50 HZ 10 * 1000 + 20000 DUTY ;
+: DEGREES 			OVER HIGH 7000 1000 */ 1500 + 20000 50 HZ DUTY ;
+
 \ : SERVO ( 0..100% -- )		PWMPIN  $7D0 PWMDIV !  10 * 1000 + 20000 DUTY ;
 
 
@@ -1439,6 +1442,25 @@ pub COM1	' TX1 EMIT! ' RX1 ' RX1? KEYS! ;
 	170145 1000000 */   6 -
 ;
 
+{
+
+	( HC-SR04 PIN SENSOR )
+
+--- PING trigger ping and return with result in mm
+: PING ( echo trig -- mm ) ( USAGE: 6 7 PING )
+--- trigger ping module
+    DUP LOW 2 us
+--- release and ignore response for 10us
+    DUP HIGH 10 us
+    LOW DUP FLOAT
+--- wait for the high to low (which also captures lap timing)
+    DUP WAITHI WAITLO
+--- read lap timing and convert for sea level @25'C into mm less depth of sensor
+    LAP@ 170145 1000000 */ 6 -
+;
+
+}
+
 
 
 \ #############################################################
@@ -1507,7 +1529,11 @@ datasheet says 891 would correspond to 20.1°C
 : .ADCS		5 0 DO CRLF I . PRINT: I ADC@ DUP 5 U.R PRINT"  = " >mV .mV LOOP  ;
 : !ADC		%11 ADC-CS ! 0 ADC@ DROP ( adcbuf 20 ERASE ) ;
 
+{
+--- Convert 'F to 'C
+: 'C ( f.ff -- c.cc ) 3200 - 500 900 */ ;
 
+}
 
 
 
@@ -1726,7 +1752,7 @@ transfer operations (refer to "SDIO Card Specification" for further details).
 
 
 : SDIO
-	~sdpins @ 0EXIT
+    ~sdpins @ 0EXIT
     $CA SDDO PAD!
     $73 SDCK PAD!
     $7B SDDI PAD!
@@ -2563,7 +2589,7 @@ pub FLINE ( dst -- )
 
 ( offset -- ) --- Load current file
 pub -FLOAD ( addr -- )		_fread ! ['] FKEY  ['] FKEY?  KEYS! ;
-pub FLOAD					!FPOP FOPEN 0 -FLOAD ;
+pub FLOAD			!FPOP FOPEN 0 -FLOAD ;
 --- load the current file and quit
 pub RELOAD ( addr -- )		-FLOAD QUIT ;
 
@@ -2591,10 +2617,13 @@ pub CD$		@FILE CWD!  file$ cwd$ $! ;
 
 pub CD		FOPEN CD$ ;
 
-pub FRENAME     OPEN-FILE IF TOKEN ?DUP IF OVER + C~ AS8.3 SAVEDIR ELSE 2DROP THEN THEN ;
+pri -FRENAME    ?DUP IF OVER + C~ AS8.3 SAVEDIR ELSE 2DROP THEN ;
+--- Specify the file by dir index and rename (95 FRENAME# TEMP.TXT)
+pub FRENAME#    FOPEN# TOKEN -FRENAME ;
+pub FRENAME     OPEN-FILE IF TOKEN THEN ;
 
 
-( TRIED THIS FIRST SINCE i HAD A CARD WITH A CORRUPTED SECTOR 0 )
+( TRIED THIS FIRST SINCE I HAD A CARD WITH A CORRUPTED SECTOR 0 )
 \ NOTE! Issue RWS permissions before using (safety)
 pub FORMAT.MBR
 	SDBUF 512 ERASE
@@ -2672,10 +2701,7 @@ pub I2CPINS ( scl sda -- ) ~sda C! ~scl C! ;
 pri !I2C		*SDA PU *SCL PU *SCL FLOAT *SDA FLOAT ;
 pub I2C.DLY		~idly H@ 0 DO LOOP ;
 
-\ pub I2C.CLK		*SCL HIGH *SCL FLOAT BEGIN *SCL PIN@ UNTIL I2C.DLY *SCL LOW I2C.DLY ;
-\ pub I2C.CLK?		*SDA PIN@ I2C.CLK ;
 ( Patch for CCS811 clock stretching - Pete Foden )
-
 pri I2C.CLKH		I2C.DLY *SCL HIGH *SCL FLOAT 1000 0 DO I2C.DLY *SCL PIN@ IF LEAVE THEN LOOP ;
 pri I2C.CLKL		I2C.DLY *SCL LOW I2C.DLY ;
 pub I2C.CLK? ( -- sda )	I2C.CLKH	*SDA PIN@ *SDA FLOAT 	I2C.CLKL ;
@@ -2687,8 +2713,6 @@ pub I2C.START		!I2C acks C~  *SCL HIGH *SCL FLOAT  I2C.DLY *SDA LOW  I2C.DLY *SC
 --- I2C RESTART - ensure bus is idle then restart
 pub <I2C>		*SDA PIN@ 0= IF I2C.STOP THEN I2C.START ;
 
---- default I2C device address
-\ $A4 variable i2cdev
 pub I2CPUT ( data -- ack )
     8 0 DO
     DUP 7 >> *SDA PIN! I2C.CLK 2* LOOP
@@ -2703,7 +2727,8 @@ pub I2CGET ( ack -- data )
 
 pub I2CRD? ( adr -- ack )	I2C.STOP 1 OR I2C.START I2CPUT 0= ;
 pub I2CRD ( adr -- )		I2CRD? DROP ;
-pub I2CWR ( adr -- ) 		I2C.STOP $FE AND I2C.START I2CPUT DROP ;
+pub I2CWR? ( adr -- ) 		I2C.STOP $FE AND I2C.START I2CPUT ;
+pub I2CWR ( adr -- ) 		i2cwr? DROP ;
 pub I2C! ( data -- )		I2CPUT 0= 1 AND acks C+! ;
 pub I2C@ 			0 I2CGET ;
 pub nakI2C@			TRUE I2CGET ;
@@ -2726,37 +2751,23 @@ pri .i2c
 	$D0 OF ." DS3231 RTC" ENDOF
 	$DE OF ." MCP79410 RTC" ENDOF
 	$40 OF ." PCF8574 I/O" ENDOF
+        ." ???"
         ENDCASE
         ;
 
 
-pub lsi2c	$100 0 DO I I2CRD? IF 1 I2CGET DROP I2C.STOP I SPACE DUP .BYTE SPACE .I2C THEN 2 +LOOP ;
-{
-	--- UB3 I2C WORDS ---
+pub lsi2c
+    $100 0 DO
+      I I2CRD? IF 1 I2CGET DROP I2C.STOP
+      CRLF I .BYTE SPACE I .I2C THEN
+    2 +LOOP
+;
 
-: !UB 	!I2C ;
---- Write cmd & data to UB3	start     write dev cmd  data stop
-pub UBCMD ( data cmd -- )	!UB I2C.START $36 I2C!  I2C! I2C! I2C.STOP ;
+        ( PCF8574 style I2C I/O )
+pub IO@ ( dev -- byte )   I2CRD? IF 1 I2CGET ELSE 0 THEN ;
+pub IO! ( byte dev -- )   I2CWR I2CPUT DROP I2C.STOP ;
 
---- Read res & data from UB3	start     read dev restart   ack cmd  nak data
-pub UBDAT ( -- hhll )		!UB <I2C> $37 I2C! 0 I2CGET >B 8 << 1 I2CGET >B OR I2C.STOP ;
-
---- set address				split, init   select   dev      adrh adrl
-pub UBADR ( addr -- ) 		W>B !UB I2C.START $36 I2C!   I2C! I2C! 10 us ;
-pub UBRD 			I2C.START $37 I2C! I2C@ nakI2C@ 8 << OR I2C.STOP ;
-pub UBW@ ( addr -- word )	UBADR UBRD ;
-pub UB@				DUP UBW@ SWAP 2+ UBW@ 16 << OR ;
-pub UBC@ ( addr -- byte )	UBW@ >B ;
-
-pub SFR@ ( iadr -- dat )	$CB UBCMD UBDAT >B ;
-pub SFRS 			['] SFR@ DUP DUP DUMP! ;
-
-
---- select UB3 as DUMP source
-pub UB				['] UBC@   ['] UBW@   ['] UB@ DUMP! ;
-
-}
-
+        ( I2C EEPROM )
 
 
 
@@ -2773,6 +2784,7 @@ byte @sec
 byte @min
 byte @hour
 byte @day
+
 byte @date
 byte @month
 byte @year
@@ -2783,7 +2795,12 @@ pub DAY@			@day C@ 7 AND ;
 	( *** RV-3028-C7 RTC *** )
 
 ( Changed @RTC to use a variable instead to allow for other RTC chips)
-\ $A4 variable ~rtc
+{
+$D0     DS3231  DS1307
+$A2     PCF8563
+$A4     RV-3028-C7
+$DE     MCP79410
+}
 pub @RTC			~rtc C@ ;
 pub RTC? ( -- flg )		@RTC I2CRD? I2C.STOP ;
 
@@ -2801,6 +2818,7 @@ pub RTC				['] RTC@ DUP DUP DUMP! ;
 
 	( *** HIGH LEVEL TIME KEEPING RTC INTERFACE *** )
 pri 8563?			@RTC $A2 = ;
+pri 3028?                       @RTC $A4 = ;
 pri RTCSEC 			0 8563? IF 2+ THEN ;
 
 --- fast sequential read of first 7 time keeping registers
@@ -2812,8 +2830,9 @@ pub RDRTC
 ---	read
 	<I2C> @RTC 1+ I2C!    @sec 6 BOUNDS DO I2C@ I C! LOOP
 	nakI2C@ @year C! I2C.STOP
---- swap day/date on PCF8563
-	8563? IF @day C@ @date C@ @day C! @date C! THEN
+--- swap day/date on PCF8563 and offset to 1 TO 7
+	8563? IF @day C@ @date C@  1+ @day C! @date C! THEN
+        3028? IF @day C++ THEN
 	;
 
 \ Init RTC configs etc ( not time ) on boot
@@ -2851,16 +2870,16 @@ pub UTIME! ( secs -- )		27 4 BOUNDS DO DUP I RTC! 8 >> LOOP DROP ;
 pri RTC3! 			3 BOUNDS DO I RTCB! LOOP ;
 \ pub TIME! ( hhmmss -- )		!RTC 100 U/MOD SWAP 0 RTCB! 100 U/MOD SWAP 1 RTCB! 2 RTCB! ;
 pub TIME! ( hhmmss -- )
- 	RTC? IF !RTC DUP HMS SWAP ROT  RTCSEC RTC3! THEN QTIME! ;
---- day of the week is 1 to 7 (mon to sun) but stored as 0..6
-pub DAY!			1- 7 AND @day C! ; \ 3 RTC! ;
+ 	RTC? IF !RTC DUP HMS SWAP ROT $80 OR RTCSEC RTC3! THEN QTIME! ;
+--- day of the week is 1 to 7 (mon to sun) but stored as 0..6 internally for PCF8563/RV3028
+pub DAY! ( day -- )		1 MAX 7 AND @day C! ;
 pub DATE! ( yymmdd -- )
     HMS @year C! @month C! @date C!
-    RTC? IF !RTC  @RTC $A2 =
-      IF @date C@ 5 RTCB! @month C@ 7 RTCB! @year C@ 8 RTCB! DAY@ 6 RTC!
-      ELSE @date C@ 4 RTCB! @month C@ 5 RTCB! @year C@ 6 RTCB! DAY@ 3 RTC!
+    RTC? 0EXIT !RTC  8563?
+      IF @date C@ 5 RTCB! @month C@ 7 RTCB! @year C@ 8 RTCB! DAY@ 1- 6 RTC!
+      ELSE @date C@ 4 RTCB! @month C@ 5 RTCB! @year C@ 6 RTCB!
+        DAY@ 3028? IF 1- THEN 3 RTC!
       THEN
-    THEN
 ;
 {
         0 1 2 3 4 5 6 7 8
@@ -2869,13 +2888,13 @@ DS3231	s m h W D M Y
 }
 --- read bcd fields and mask before converting to decimal
 pub TIME@			RTC? IF 1 I2CGET DROP RDRTC @sec U@ $3F7F7F AND BCD>DEC ELSE QTIME@ THEN ;
-pub DATE@			RDRTC @date U@ $FF1F3F AND BCD>DEC ;
+pub DATE@			RTC? IF RDRTC THEN @date U@ $FF1F3F AND BCD>DEC ;
 
 pub .DT				DATE@ 6 U.R $2D EMIT TIME@ 6 Z U.R ;
 
 pub .HMS ( n ch -- )		>R HMS 2 Z U.R R@ EMIT 2 Z U.R R> EMIT 2 Z U.R ;
 pub .DATE			DATE@ ." 20" $2F .HMS ;
-pub .DAY			DAY@ 3 * s" MonTueWedThuFriSatSun" DROP + 3 TYPE ;
+pub .DAY			DAY@ 1- 3 * s" MonTueWedThuFriSatSun" DROP + 3 TYPE ;
 pub .TIME			TIME@ $3A .HMS ;
 pub .FDT			.DATE SPACE .DAY SPACE .TIME ;
 {
@@ -2898,6 +2917,32 @@ pri ?RTC
 
 
 
+
+( NEC IR TRANSMIT & RECEIVE )
+{
+pub IRTX ( code pin -- )
+	DUP APIN LOW
+	38 KHZ 9 ms MUTE 4500 us
+	32 FOR 1 ROL 38 KHZ 450 us MUTE 450 us DUP 1 AND IF 450 us THEN NEXT DROP
+	9 ms
+	;
+
+pub IRRX ( pin -- code )
+	MASK 4 COG!
+---	wait and synch
+        WAITLO WAITHI WAITLO
+	 --- synch period timing as reference
+        WAITHI 2 COG@ 1 COG@ -
+        0 32 FOR
+	--- next bit timing
+          2* WAITLO 2 COG@ 1 COG@ -
+	--- calulate timing as a 1 or 0 using synch ref
+	  3RD / 1 > 1 AND +
+          WAITHI
+        NEXT
+        NIP
+        ;
+}
 
 
 
